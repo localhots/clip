@@ -1,47 +1,49 @@
 # Clip
 
-Fast structured logging for .NET 9 / C# 13 with no dependencies.
+Fast structured logging for .NET 9 / C# 13. Very fast. Very opinionated.
 
 ## Why
 
-Most C# loggers make you pick between a familiar API and low overhead. The
+Most C# loggers make you pick between a convenient API and low overhead. The
 familiar ones (Serilog, NLog, etc.) allocate 500–1500 bytes per call. Zero-alloc
-alternatives are verbose. Clip doesn't make you choose.
+alternatives are verbose.
 
 Clip also skips the printf-style template strings that most loggers use.
 Instead, messages are plain strings and structured data goes in typed fields
-alongside them. Messages stay greppable, fields stay separate.
+alongside them.
 
-The **ergonomic interface** takes anonymous objects and costs one small
-allocation (~40 bytes). The **zero-alloc interface** takes `Field` values on the
-stack and allocates nothing. Same output, separate pipelines — you pick which
-one to use at each call site.
+The **ergonomic interface** (`Clip.ILogger`) takes anonymous objects and costs
+one small allocation (~40 bytes). The **zero-alloc interface**
+(`Clip.IZeroLogger`) takes `Field` values on the stack and allocates nothing.
+Same output, separate pipelines.
 
 ## Speed
 
 Clip formats directly into pooled UTF-8 byte buffers. No intermediate strings,
 no allocations on the hot path, no background threads hiding latency. Log calls
-are synchronous by default — when the call returns, the message has been
-written.
+are synchronous by default, `BackgroundSink` can be used for async.
 
-Filtered calls (below minimum level) are free — the level check is inlined, and
-BenchmarkDotNet can't even measure a cost.
+Filtered calls (below minimum level) are free — the level check is inlined and
+nothing else runs. MEL's source-generated `[LoggerMessage]` variant gets
+filtered calls down to ~0.6 ns, somehow still measurably slower than Clip.
+That's the one scenario where source generation significantly outperforms
+standard MEL.
 
-The zero-alloc interface with five fields runs in ~55 ns with zero heap
-allocations. The ergonomic interface runs in ~76 ns with a single 40-byte Gen0
-allocation. For context, Serilog takes ~850 ns and allocates ~970 bytes for the
+The zero-alloc interface with five fields runs in ~138 ns with zero heap
+allocations. The ergonomic interface runs in ~176 ns with a 72-byte Gen0
+allocation. For context, MEL takes ~807 ns and allocates ~808 bytes for the
 same work.
 
-Async is opt-in via `BackgroundSink`.
+Full results in [docs/COMPARE.md](docs/COMPARE.md). To run the benchmarks:
 
-Full results in [docs/COMPARE.md](docs/COMPARE.md). Run `make bench` (~40 minutes) to
-generate comparison data and charts. `make pdf` renders PDFs.
+- `make bench` takes ~40 minutes
+- `make pdf` produces nice PDFs with charts and notes
 
 ## Design
 
 **Fields, not templates.** Messages are plain strings. Structured data goes in
-fields alongside the message, not interpolated into it. Messages stay greppable
-regardless of field values. Sinks get typed field data directly.
+fields alongside the message, not interpolated into it. Sinks get typed field
+data directly.
 
 ```csharp
 // Serilog — template parsed at runtime, field position matters
@@ -56,8 +58,8 @@ NuGet packages.
 
 **Sinks own everything.** The logger is pure dispatch: check level, merge
 fields, call sinks. It does no formatting, holds no locks, performs no I/O. Each
-sink owns its own output pipeline. A failing sink doesn't affect other sinks or
-the caller.
+sink owns its own output pipeline. Failing sinks don't affect the others or the
+caller.
 
 ## Requirements
 
@@ -268,25 +270,25 @@ Install alongside Clip:
 dotnet add package Clip.Analyzers
 ```
 
-| ID | Severity | Description | Code Fix |
-|----|----------|-------------|----------|
-| CLIP001 | Error | Invalid fields argument — primitives, strings, arrays not accepted | Wrap in anonymous type |
-| CLIP002 | Warning | Message contains `{Placeholder}` template syntax | Move to fields |
-| CLIP003 | Warning | `AddContext` return value not disposed | Add `using` |
-| CLIP004 | Info | Exception not passed to `Error` in catch block | Add exception parameter |
-| CLIP005 | Warning | Unreachable code after `Fatal` | — |
-| CLIP006 | Warning | Interpolated string in log message | Extract to fields |
-| CLIP007 | Info | Exception wrapped in fields anonymous type | Use `Error` overload |
-| CLIP008 | Info | Empty or whitespace log message | — |
-| CLIP009 | Info | Log message starts with lowercase | Capitalize |
+| ID      | Severity | Description                                                        | Code Fix                |
+|---------|----------|--------------------------------------------------------------------|-------------------------|
+| CLIP001 | Error    | Invalid fields argument — primitives, strings, arrays not accepted | Wrap in anonymous type  |
+| CLIP002 | Warning  | Message contains `{Placeholder}` template syntax                   | Move to fields          |
+| CLIP003 | Warning  | `AddContext` return value not disposed                             | Add `using`             |
+| CLIP004 | Info     | Exception not passed to `Error` in catch block                     | Add exception parameter |
+| CLIP005 | Warning  | Unreachable code after `Fatal`                                     | —                       |
+| CLIP006 | Warning  | Interpolated string in log message                                 | Extract to fields       |
+| CLIP007 | Info     | Exception wrapped in fields anonymous type                         | Use `Error` overload    |
+| CLIP008 | Info     | Empty or whitespace log message                                    | —                       |
+| CLIP009 | Info     | Log message starts with lowercase                                  | Capitalize              |
 
 ## Build & Test
 
 ```bash
 make help          # show all targets
 make check         # build + test
-make bench         # full benchmark suite (slow)
-make docs          # generate charts + COMPARE.md from existing artifacts
+make bench         # run benchmark suite (~40 minutes)
+make pdf           # generate charts + PDFs
 make demo          # run demo app
 ```
 
