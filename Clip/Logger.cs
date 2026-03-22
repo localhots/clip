@@ -1,0 +1,413 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Clip.Context;
+using Clip.Fields;
+using Clip.Sinks;
+
+namespace Clip;
+
+internal readonly struct EnricherEntry(ILogEnricher enricher, LogLevel minLevel)
+{
+    public readonly ILogEnricher Enricher = enricher;
+    public readonly LogLevel MinLevel = minLevel;
+}
+
+/// <summary>
+/// The concrete logger. Implements both <see cref="ILogger"/> (ergonomic, reflection-based)
+/// and <see cref="IZeroLogger"/> (zero-allocation, <see cref="Field"/>-based) interfaces.
+/// Create via <see cref="Create"/>; register as a singleton.
+/// </summary>
+public sealed class Logger : ILogger, IZeroLogger
+{
+    private readonly SinkEntry[] _sinks;
+    private readonly EnricherEntry[]? _enrichers;
+    private readonly ILogRedactor[]? _redactors;
+
+    /// <summary>The global minimum log level. Calls below this level are no-ops.</summary>
+    public LogLevel MinLevel { get; }
+
+    private readonly struct SinkEntry(ILogSink sink, LogLevel minLevel)
+    {
+        public readonly ILogSink Sink = sink;
+        public readonly LogLevel MinLevel = minLevel;
+    }
+
+    private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors)
+    {
+        MinLevel = minLevel;
+        _sinks = sinks;
+        _enrichers = enrichers;
+        _redactors = redactors;
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="Logger"/> from a fluent configuration lambda.
+    /// </summary>
+    /// <param name="configure">
+    /// A delegate that configures sinks, enrichers, redactors, and minimum level
+    /// via the <see cref="LoggerConfig"/> builder.
+    /// </param>
+    /// <example>
+    /// <code>
+    /// var logger = Logger.Create(config => config
+    ///     .MinimumLevel(LogLevel.Debug)
+    ///     .Enrich.Field("app", "my-service")
+    ///     .WriteTo.Console());
+    /// </code>
+    /// </example>
+    public static Logger Create(Action<LoggerConfig> configure)
+    {
+        var config = new LoggerConfig();
+        configure(config);
+        var raw = config.WriteTo.Build();
+        var sinks = new SinkEntry[raw.Length];
+        for (var i = 0; i < raw.Length; i++)
+            sinks[i] = new SinkEntry(raw[i].Sink, raw[i].MinLevel);
+        return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build());
+    }
+
+
+    //
+    // Public dynamic-level API for adapters (e.g., MEL integration)
+    //
+
+    /// <summary>Returns <c>true</c> if the given level passes the global minimum level filter.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsEnabled(LogLevel level)
+    {
+        return MinLevel <= level;
+    }
+
+    /// <summary>Logs at a dynamic level. Used by framework adapters (e.g., MEL integration).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Log(LogLevel level, string message, ReadOnlySpan<Field> fields, Exception? exception = null)
+    {
+        LogZeroAlloc(level, message, fields, exception);
+    }
+
+    IDisposable ILogger.AddContext(object fields)
+    {
+        return AddContext(fields);
+    }
+
+    IDisposable IZeroLogger.AddContext(params ReadOnlySpan<Field> fields)
+    {
+        return AddContext(fields);
+    }
+
+    public static ContextScope AddContext(object fields)
+    {
+        var list = FieldListPool.Rent();
+        try
+        {
+            FieldExtractor.ExtractInto(fields, list);
+            return LogScope.Push(CollectionsMarshal.AsSpan(list));
+        }
+        finally
+        {
+            FieldListPool.Return(list);
+        }
+    }
+
+    [OverloadResolutionPriority(1)]
+    public static ContextScope AddContext(params ReadOnlySpan<Field> fields)
+    {
+        return LogScope.Push(fields);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Trace(string message, object? fields = null)
+    {
+        LogErgonomic(LogLevel.Trace, message, fields, null);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Debug(string message, object? fields = null)
+    {
+        LogErgonomic(LogLevel.Debug, message, fields, null);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Info(string message, object? fields = null)
+    {
+        LogErgonomic(LogLevel.Info, message, fields, null);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Warning(string message, object? fields = null)
+    {
+        LogErgonomic(LogLevel.Warning, message, fields, null);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Error(string message, object? fields = null)
+    {
+        LogErgonomic(LogLevel.Error, message, fields, null);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Error(string message, Exception exception, object? fields = null)
+    {
+        LogErgonomic(LogLevel.Error, message, fields, exception);
+    }
+
+    public void Fatal(string message, object? fields = null)
+    {
+        // Fatal always logs — never filtered
+        var list = FieldListPool.Rent();
+        try
+        {
+            ApplyEnrichers(list, LogLevel.Fatal);
+            var enricherCount = list.Count;
+            MergeFields(fields, list);
+            if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
+            var span = CollectionsMarshal.AsSpan(list);
+            ApplyRedactors(span);
+            WriteTo(LogLevel.Fatal, message, span, null);
+        }
+        finally
+        {
+            FieldListPool.Return(list);
+        }
+
+        Dispose(); // Flush sinks
+        Environment.Exit(1);
+    }
+
+
+    [OverloadResolutionPriority(1)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Trace(string message, params ReadOnlySpan<Field> fields)
+    {
+        LogZeroAlloc(LogLevel.Trace, message, fields, null);
+    }
+
+    [OverloadResolutionPriority(1)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Debug(string message, params ReadOnlySpan<Field> fields)
+    {
+        LogZeroAlloc(LogLevel.Debug, message, fields, null);
+    }
+
+    [OverloadResolutionPriority(1)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Info(string message, params ReadOnlySpan<Field> fields)
+    {
+        LogZeroAlloc(LogLevel.Info, message, fields, null);
+    }
+
+    [OverloadResolutionPriority(1)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Warning(string message, params ReadOnlySpan<Field> fields)
+    {
+        LogZeroAlloc(LogLevel.Warning, message, fields, null);
+    }
+
+    [OverloadResolutionPriority(1)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Error(string message, params ReadOnlySpan<Field> fields)
+    {
+        LogZeroAlloc(LogLevel.Error, message, fields, null);
+    }
+
+    [OverloadResolutionPriority(1)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Error(string message, Exception exception, params ReadOnlySpan<Field> fields)
+    {
+        LogZeroAlloc(LogLevel.Error, message, fields, exception);
+    }
+
+    //
+    // Inlining strategy: each public log method (Trace, Debug, etc.) is AggressiveInlining,
+    // so the level check becomes a single comparison at the call site — the most common
+    // outcome (filtered out) has zero call overhead. The Impl methods are NoInlining to
+    // prevent the JIT from bloating call sites with the full field-merge/write logic.
+    //
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void LogErgonomic(LogLevel level, string message, object? fields, Exception? exception)
+    {
+        if (MinLevel > level) return;
+        LogErgonomicImpl(level, message, fields, exception);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void LogErgonomicImpl(LogLevel level, string message, object? fields, Exception? exception)
+    {
+        try
+        {
+            if (fields == null && !LogScope.HasCurrent && _enrichers == null && _redactors == null)
+            {
+                WriteTo(level, message, ReadOnlySpan<Field>.Empty, exception);
+                return;
+            }
+
+            var list = FieldListPool.Rent();
+            try
+            {
+                ApplyEnrichers(list, level);
+                var enricherCount = list.Count;
+                MergeFields(fields, list);
+                if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
+                var span = CollectionsMarshal.AsSpan(list);
+                ApplyRedactors(span);
+                WriteTo(level, message, span, exception);
+            }
+            finally
+            {
+                FieldListPool.Return(list);
+            }
+        }
+        catch
+        {
+            // A log call must never crash the application.
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void LogZeroAlloc(LogLevel level, string message, ReadOnlySpan<Field> fields, Exception? exception)
+    {
+        if (MinLevel > level) return;
+        LogZeroAllocImpl(level, message, fields, exception);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void LogZeroAllocImpl(LogLevel level, string message, ReadOnlySpan<Field> fields, Exception? exception)
+    {
+        try
+        {
+            if (!LogScope.HasCurrent && _enrichers == null && _redactors == null)
+            {
+                WriteTo(level, message, fields, exception);
+                return;
+            }
+
+            var list = FieldListPool.Rent();
+            try
+            {
+                ApplyEnrichers(list, level);
+                var enricherCount = list.Count;
+                LogScope.CopyCurrentTo(list);
+                foreach (var f in fields) list.Add(f);
+                if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
+                var span = CollectionsMarshal.AsSpan(list);
+                ApplyRedactors(span);
+                WriteTo(level, message, span, exception);
+            }
+            finally
+            {
+                FieldListPool.Return(list);
+            }
+        }
+        catch
+        {
+            // A log call must never crash the application.
+        }
+    }
+
+    private static void MergeFields(object? callSiteFields, List<Field> target)
+    {
+        // 1. Context fields first (lower priority)
+        LogScope.CopyCurrentTo(target);
+
+        // 2. Call-site fields second (overwrite on a duplicate key)
+        if (callSiteFields == null) return;
+        var before = target.Count;
+        FieldExtractor.ExtractInto(callSiteFields, target);
+        // Deduplicate: call-site fields (at indices >= before) win
+        if (before > 0) DeduplicateFields(target, before);
+    }
+
+    private static void DeduplicateFields(List<Field> fields, int newFieldsStart)
+    {
+        var span = CollectionsMarshal.AsSpan(fields);
+        for (var i = newFieldsStart; i < span.Length; i++)
+            for (var j = 0; j < newFieldsStart; j++)
+            {
+                if (span[j].Key != span[i].Key) continue;
+                fields.RemoveAt(j);
+                newFieldsStart--;
+                i--;
+                break;
+            }
+    }
+
+    private void ApplyEnrichers(List<Field> target, LogLevel level)
+    {
+        if (_enrichers == null) return;
+        foreach (ref readonly var entry in _enrichers.AsSpan())
+        {
+            if (entry.MinLevel > level) continue;
+            try
+            {
+                entry.Enricher.Enrich(target);
+            }
+            catch
+            {
+                // Enricher failure must not crash the pipeline
+            }
+        }
+    }
+
+    private void ApplyRedactors(Span<Field> fields)
+    {
+        if (_redactors == null) return;
+        foreach (var redactor in _redactors)
+            try
+            {
+                redactor.Redact(fields);
+            }
+            catch
+            {
+                // Redactor failure must not crash the pipeline
+            }
+    }
+
+    /// <summary>
+    /// Removes enricher fields (at indices 0..enricherCount-1) whose key
+    /// collides with any later field (context or call-site wins).
+    /// </summary>
+    private static void DeduplicateEnricherFields(List<Field> fields, int enricherCount)
+    {
+        var span = CollectionsMarshal.AsSpan(fields);
+        for (var i = enricherCount - 1; i >= 0; i--)
+            for (var j = enricherCount; j < span.Length; j++)
+            {
+                if (span[i].Key != span[j].Key) continue;
+                fields.RemoveAt(i);
+                enricherCount--;
+                span = CollectionsMarshal.AsSpan(fields);
+                break;
+            }
+    }
+
+    private void WriteTo(LogLevel level, string message, ReadOnlySpan<Field> fields, Exception? exception)
+    {
+        var ts = DateTimeOffset.UtcNow;
+        foreach (ref readonly var entry in _sinks.AsSpan())
+        {
+            if (entry.MinLevel > level) continue;
+            try
+            {
+                entry.Sink.Write(ts, level, message, fields, exception);
+            }
+            catch
+            {
+                // Sink failure must not affect other sinks
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        foreach (ref readonly var entry in _sinks.AsSpan())
+            try
+            {
+                entry.Sink.Dispose();
+            }
+            catch
+            {
+                // Ignored
+            }
+    }
+}

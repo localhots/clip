@@ -1,0 +1,13 @@
+<Project>
+
+    <PropertyGroup>
+        <Version>0.1.0</Version>
+        <Authors>Gregory Eremin</Authors>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/localhots/clip</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/localhots/clip</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <Copyright>Copyright (c) 2026 Gregory Eremin</Copyright>
+    </PropertyGroup>
+
+</Project>

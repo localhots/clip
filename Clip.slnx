@@ -1,0 +1,11 @@
+<Solution>
+    <Project Path="Clip/Clip.csproj" />
+    <Project Path="Clip.Benchmarks/Clip.Benchmarks.csproj" />
+    <Project Path="Clip.Demo/Clip.Demo.csproj" />
+    <Project Path="Clip.ComparisonDemo/Clip.ComparisonDemo.csproj" />
+    <Project Path="Clip.Tests/Clip.Tests.csproj" />
+    <Project Path="Clip.Extensions.Logging/Clip.Extensions.Logging.csproj" />
+    <Project Path="Clip.Extensions.Logging.Tests/Clip.Extensions.Logging.Tests.csproj" />
+    <Project Path="Clip.Analyzers/Clip.Analyzers.csproj" />
+    <Project Path="Clip.Analyzers.Tests/Clip.Analyzers.Tests.csproj" />
+</Solution>

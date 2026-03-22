@@ -1,0 +1,17 @@
+# C#
+bin/
+obj/
+*.dll
+
+# Python
+__pycache__
+*.pyc
+.venv/
+
+# Temporary / artifacts
+tmp/
+pkg/
+
+# IDE
+.idea/
+*.user
