@@ -26,10 +26,11 @@ internal static class RetryClassifier
             } => true,
 
             // OTLP spec: these gRPC codes are retryable.
+            // Note: Cancelled is excluded — it indicates client-initiated cancellation (e.g. disposal),
+            // not a transient server error.
             RpcException rpc => rpc.StatusCode is
                 StatusCode.Unavailable or
                 StatusCode.DeadlineExceeded or
-                StatusCode.Cancelled or
                 StatusCode.Aborted or
                 StatusCode.OutOfRange or
                 StatusCode.DataLoss or

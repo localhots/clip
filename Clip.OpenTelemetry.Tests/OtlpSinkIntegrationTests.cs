@@ -61,11 +61,14 @@ public class OtlpSinkIntegrationTests
                 sink.Write(DateTimeOffset.UtcNow, LogLevel.Debug, $"msg {i}",
                     ReadOnlySpan<Field>.Empty, null);
 
-            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+            // Wait until all 5 records have been exported (may be split across batches).
+            await exporter.WaitForRecordCountAsync(5, TimeSpan.FromSeconds(2));
         }
 
-        Assert.Single(exporter.Requests);
-        Assert.Equal(5, exporter.Requests[0].ResourceLogs[0].ScopeLogs[0].LogRecords.Count);
+        var totalRecords = exporter.Batches
+            .SelectMany(b => b.Records)
+            .ToList();
+        Assert.Equal(5, totalRecords.Count);
     }
 
     [Fact]
@@ -305,6 +308,24 @@ public class OtlpSinkIntegrationTests
                 if (!await _signal.WaitAsync(timeout))
                     throw new TimeoutException(
                         $"Expected {count} exports, got {_batches.Count} after {timeout}");
+        }
+
+        public async Task WaitForRecordCountAsync(int count, TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                lock (_lock)
+                {
+                    if (_batches.Sum(b => b.Records.Count) >= count)
+                        return;
+                }
+
+                await Task.Delay(50);
+            }
+
+            throw new TimeoutException(
+                $"Expected {count} records, got {_batches.Sum(b => b.Records.Count)} after {timeout}");
         }
 
         public void Dispose()

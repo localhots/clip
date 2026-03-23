@@ -277,9 +277,13 @@ public sealed class OtlpSink : ILogSink
         _channel.Writer.TryComplete();
         _cts.Cancel();
 
-        if (!_exportTask.Wait(TimeSpan.FromSeconds(5)))
+        try
         {
-            // Export timed out — proceed with disposal.
+            _exportTask.Wait(TimeSpan.FromSeconds(5));
+        }
+        catch
+        {
+            // Export loop may fault during cancellation — safe to ignore on disposal.
         }
 
         _exporter.Dispose();
