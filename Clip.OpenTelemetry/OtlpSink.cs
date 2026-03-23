@@ -23,6 +23,10 @@ public sealed class OtlpSink : ILogSink
     private readonly ScopeLogs _scopeLogs;
     private readonly int _batchSize;
     private readonly TimeSpan _flushInterval;
+    private readonly RetryPolicy _retryPolicy;
+    private readonly int _maxRetries;
+    private readonly TimeSpan _retryBaseDelay;
+    private readonly TimeSpan _retryMaxDelay;
     private readonly Task _exportTask;
     private readonly CancellationTokenSource _cts = new();
     private long _rejectedRecords;
@@ -49,6 +53,10 @@ public sealed class OtlpSink : ILogSink
 
         _batchSize = options.BatchSize;
         _flushInterval = options.FlushInterval;
+        _retryPolicy = options.RetryPolicy;
+        _maxRetries = options.MaxRetries;
+        _retryBaseDelay = options.RetryBaseDelay;
+        _retryMaxDelay = options.RetryMaxDelay;
 
         _channel = Channel.CreateBounded<LogEntry>(
             new BoundedChannelOptions(options.QueueCapacity)
@@ -217,10 +225,32 @@ public sealed class OtlpSink : ILogSink
             _scopeLogs.LogRecords.Add(record);
         }
 
-        var response = await _exporter.ExportAsync(_request, ct);
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var response = await _exporter.ExportAsync(_request, ct);
 
-        if (response.PartialSuccess is { RejectedLogRecords: > 0 } partial)
-            Interlocked.Add(ref _rejectedRecords, partial.RejectedLogRecords);
+                if (response.PartialSuccess is { RejectedLogRecords: > 0 } partial)
+                    Interlocked.Add(ref _rejectedRecords, partial.RejectedLogRecords);
+
+                return; // Success.
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                var canRetry = _retryPolicy == RetryPolicy.ExponentialBackoff
+                    && attempt < _maxRetries
+                    && RetryClassifier.IsRetryable(ex);
+
+                if (!canRetry)
+                    throw; // Bubbles to export loop catch → increments FailedExports.
+
+                var baseMs = _retryBaseDelay.TotalMilliseconds * (1 << attempt);
+                var cappedMs = Math.Min(baseMs, _retryMaxDelay.TotalMilliseconds);
+                var jitter = Random.Shared.NextDouble() * 0.5 * cappedMs;
+                await Task.Delay(TimeSpan.FromMilliseconds(cappedMs + jitter), ct);
+            }
+        }
     }
 
     //

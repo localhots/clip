@@ -37,6 +37,18 @@ public sealed class OtlpSinkOptions
     /// <summary>Timeout for each export request. Default: 10 seconds.</summary>
     public TimeSpan ExportTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>Retry behavior for failed exports. Default: <see cref="OpenTelemetry.RetryPolicy.None"/>.</summary>
+    public RetryPolicy RetryPolicy { get; set; } = RetryPolicy.None;
+
+    /// <summary>Maximum number of retry attempts per batch. Default: 3.</summary>
+    public int MaxRetries { get; set; } = 3;
+
+    /// <summary>Base delay for exponential backoff. Default: 500ms.</summary>
+    public TimeSpan RetryBaseDelay { get; set; } = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>Maximum delay between retries. Default: 5 seconds.</summary>
+    public TimeSpan RetryMaxDelay { get; set; } = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// Applies <c>OTEL_EXPORTER_OTLP_*</c> environment variable overrides to any property
     /// that still holds its default value.
