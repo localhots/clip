@@ -16,7 +16,10 @@ internal sealed class GrpcExporter : IExporter
 
     internal GrpcExporter(OtlpSinkOptions options)
     {
-        _channel = GrpcChannel.ForAddress(options.Endpoint);
+        var channelOptions = new GrpcChannelOptions();
+        if (options.Endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            channelOptions.Credentials = ChannelCredentials.Insecure;
+        _channel = GrpcChannel.ForAddress(options.Endpoint, channelOptions);
         _client = new LogsService.LogsServiceClient(_channel);
         _timeout = options.ExportTimeout;
 
