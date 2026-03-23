@@ -234,7 +234,7 @@ public sealed class OtlpSink : ILogSink
 
     public void Dispose()
     {
-        _channel.Writer.Complete();
+        _channel.Writer.TryComplete();
         _cts.Cancel();
 
         if (!_exportTask.Wait(TimeSpan.FromSeconds(5)))
