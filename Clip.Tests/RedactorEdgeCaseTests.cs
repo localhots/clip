@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Clip.Sinks;
 
 namespace Clip.Tests;
 
@@ -8,13 +9,15 @@ namespace Clip.Tests;
 /// </summary>
 public class RedactorEdgeCaseTests
 {
+    private static readonly JsonFormatConfig NestedConfig = new() { FieldsKey = "fields" };
+
     private static (Logger logger, MemoryStream ms) MakeLogger(
         Action<LoggerConfig> configure)
     {
         var ms = new MemoryStream();
         var logger = Logger.Create(c =>
         {
-            c.MinimumLevel(LogLevel.Trace).WriteTo.Json(ms);
+            c.MinimumLevel(LogLevel.Trace).WriteTo.Json(NestedConfig, ms);
             configure(c);
         });
         return (logger, ms);

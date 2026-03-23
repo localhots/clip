@@ -1,17 +1,20 @@
 using System.Text;
 using System.Text.Json;
+using Clip.Sinks;
 
 namespace Clip.Tests;
 
 public class LevelGatedEnricherTests
 {
+    private static readonly JsonFormatConfig NestedConfig = new() { FieldsKey = "fields" };
+
     private static (Logger logger, MemoryStream ms) MakeLogger(
         Action<LoggerConfig> configure, LogLevel minLevel = LogLevel.Trace)
     {
         var ms = new MemoryStream();
         var logger = Logger.Create(c =>
         {
-            c.MinimumLevel(minLevel).WriteTo.Json(ms);
+            c.MinimumLevel(minLevel).WriteTo.Json(NestedConfig, ms);
             configure(c);
         });
         return (logger, ms);

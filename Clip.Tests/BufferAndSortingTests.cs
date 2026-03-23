@@ -95,7 +95,7 @@ public class BufferAndSortingTests
     public void JsonSink_VeryLargeField_DoesNotCorrupt()
     {
         var ms = new MemoryStream();
-        var sink = new JsonSink(ms);
+        var sink = new JsonSink(new JsonFormatConfig { FieldsKey = "fields" }, ms);
         var bigValue = new string('X', 50_000);
         sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "m",
             [new Field("big", bigValue)], null);
@@ -109,7 +109,7 @@ public class BufferAndSortingTests
     public void JsonSink_ManyLargeFields_DoesNotCorrupt()
     {
         var ms = new MemoryStream();
-        var sink = new JsonSink(ms);
+        var sink = new JsonSink(new JsonFormatConfig { FieldsKey = "fields" }, ms);
         var fields = Enumerable.Range(0, 50)
             .Select(i => new Field($"f{i}", new string((char)('A' + i % 26), 1000)))
             .ToArray();
@@ -128,7 +128,7 @@ public class BufferAndSortingTests
     public void JsonSink_MultipleWrites_BufferReused()
     {
         var ms = new MemoryStream();
-        var sink = new JsonSink(ms);
+        var sink = new JsonSink(new JsonFormatConfig { FieldsKey = "fields" }, ms);
 
         for (var i = 0; i < 100; i++)
             sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, $"msg-{i}",

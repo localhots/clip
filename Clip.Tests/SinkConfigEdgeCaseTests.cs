@@ -390,7 +390,7 @@ public class SinkConfigEdgeCaseTests
     public void JsonSink_AllFieldTypes_InSingleEntry_ValidJson()
     {
         var ms = new MemoryStream();
-        var sink = new JsonSink(ms);
+        var sink = new JsonSink(new JsonFormatConfig { FieldsKey = "fields" }, ms);
         var dto = new DateTimeOffset(2024, 6, 15, 10, 30, 0, TimeSpan.Zero);
         var fields = new Field[]
         {

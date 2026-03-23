@@ -16,7 +16,7 @@ public sealed class JsonFormatConfig
     public string TimestampKey { get; init; } = "ts";
     public string LevelKey { get; init; } = "level";
     public string MessageKey { get; init; } = "msg";
-    public string FieldsKey { get; init; } = "fields";
+    public string? FieldsKey { get; init; }
     public string ErrorKey { get; init; } = "error";
 
     public IReadOnlyList<string> LevelLabels

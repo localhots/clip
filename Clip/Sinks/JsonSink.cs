@@ -19,7 +19,7 @@ public sealed class JsonSink : ILogSink
     private readonly byte[] _openTsPrefix;
     private readonly byte[] _levelPrefix;
     private readonly byte[] _msgPrefix;
-    private readonly byte[] _fieldsPrefix;
+    private readonly byte[]? _fieldsPrefix;
     private readonly byte[] _errorPrefix;
 
     public JsonSink(JsonFormatConfig config, Stream? output = null)
@@ -40,7 +40,9 @@ public sealed class JsonSink : ILogSink
         _openTsPrefix = Encoding.UTF8.GetBytes($"{{\"{esc(config.TimestampKey)}\":\"");
         _levelPrefix = Encoding.UTF8.GetBytes($"\",\"{esc(config.LevelKey)}\":\"");
         _msgPrefix = Encoding.UTF8.GetBytes($"\",\"{esc(config.MessageKey)}\":");
-        _fieldsPrefix = Encoding.UTF8.GetBytes($",\"{esc(config.FieldsKey)}\":{{");
+        _fieldsPrefix = config.FieldsKey is not null
+            ? Encoding.UTF8.GetBytes($",\"{esc(config.FieldsKey)}\":{{")
+            : null;
         _errorPrefix = Encoding.UTF8.GetBytes($",\"{esc(config.ErrorKey)}\":");
     }
 
@@ -65,21 +67,27 @@ public sealed class JsonSink : ILogSink
 
             if (fields.Length > 0)
             {
-                _buffer.WriteBytes(_fieldsPrefix);
-                // Ref readonly: avoids copying 32-byte Field structs.
-                // The first field has no leading comma; WriteJsonFieldPrefix always
-                // prepends one, so we write the first field inline and use the
-                // prefix helper for the rest.
-                _buffer.WriteJsonString(fields[0].Key);
-                _buffer.WriteBytes(":"u8);
-                WriteFieldValue(_buffer, in fields[0]);
-                for (var i = 1; i < fields.Length; i++)
+                if (_fieldsPrefix is not null)
                 {
-                    _buffer.WriteJsonFieldPrefix(fields[i].Key);
-                    WriteFieldValue(_buffer, in fields[i]);
+                    _buffer.WriteBytes(_fieldsPrefix);
+                    _buffer.WriteJsonString(fields[0].Key);
+                    _buffer.WriteBytes(":"u8);
+                    WriteFieldValue(_buffer, in fields[0]);
+                    for (var i = 1; i < fields.Length; i++)
+                    {
+                        _buffer.WriteJsonFieldPrefix(fields[i].Key);
+                        WriteFieldValue(_buffer, in fields[i]);
+                    }
+                    _buffer.WriteByte((byte)'}');
                 }
-
-                _buffer.WriteByte((byte)'}');
+                else
+                {
+                    for (var i = 0; i < fields.Length; i++)
+                    {
+                        _buffer.WriteJsonFieldPrefix(fields[i].Key);
+                        WriteFieldValue(_buffer, in fields[i]);
+                    }
+                }
             }
 
             if (exception != null)

@@ -6,12 +6,14 @@ namespace Clip.Tests;
 
 public class LoggerTests
 {
+    private static readonly JsonFormatConfig NestedConfig = new() { FieldsKey = "fields" };
+
     private static (Logger logger, MemoryStream ms) MakeJsonLogger(LogLevel minLevel = LogLevel.Trace)
     {
         var ms = new MemoryStream();
         var logger = Logger.Create(c => c
             .MinimumLevel(minLevel)
-            .WriteTo.Json(ms));
+            .WriteTo.Json(NestedConfig, ms));
         return (logger, ms);
     }
 

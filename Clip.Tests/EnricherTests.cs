@@ -1,17 +1,20 @@
 using System.Text;
 using System.Text.Json;
+using Clip.Sinks;
 
 namespace Clip.Tests;
 
 public class EnricherTests
 {
+    private static readonly JsonFormatConfig NestedConfig = new() { FieldsKey = "fields" };
+
     private static (Logger logger, MemoryStream ms) MakeLogger(
         Action<LoggerConfig> configure, LogLevel minLevel = LogLevel.Trace)
     {
         var ms = new MemoryStream();
         var logger = Logger.Create(c =>
         {
-            c.MinimumLevel(minLevel).WriteTo.Json(ms);
+            c.MinimumLevel(minLevel).WriteTo.Json(NestedConfig, ms);
             configure(c);
         });
         return (logger, ms);
@@ -130,7 +133,7 @@ public class EnricherTests
     public void NoEnrichers_BehaviorUnchanged()
     {
         var ms = new MemoryStream();
-        var logger = Logger.Create(c => c.WriteTo.Json(ms));
+        var logger = Logger.Create(c => c.WriteTo.Json(NestedConfig, ms));
         logger.Info("test", new { Key = "val" });
 
         var fields = GetFields(ReadLines(ms)[0]);
