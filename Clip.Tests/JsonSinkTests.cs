@@ -14,10 +14,12 @@ public class JsonSinkTests
         return JsonDocument.Parse(line);
     }
 
+    private static readonly JsonFormatConfig NestedConfig = new() { FieldsKey = "fields" };
+
     private static (JsonSink sink, MemoryStream ms) MakeSink()
     {
         var ms = new MemoryStream();
-        return (new JsonSink(ms), ms);
+        return (new JsonSink(NestedConfig, ms), ms);
     }
 
     [Fact]
@@ -456,5 +458,114 @@ public class JsonSinkTests
         Assert.Equal(1000, lines.Length);
         foreach (var line in lines)
             JsonDocument.Parse(line);
+    }
+
+    //
+    // Flat mode (FieldsKey = null, default)
+    //
+
+    private static (JsonSink sink, MemoryStream ms) MakeFlatSink()
+    {
+        var ms = new MemoryStream();
+        return (new JsonSink(ms), ms);
+    }
+
+    [Fact]
+    public void Write_FlatMode_FieldsAtRoot()
+    {
+        var (sink, ms) = MakeFlatSink();
+        sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "m",
+            [new Field("count", 42), new Field("name", "alice")], null);
+        using var doc = ParseLine(ms);
+        Assert.Equal(42, doc.RootElement.GetProperty("count").GetInt32());
+        Assert.Equal("alice", doc.RootElement.GetProperty("name").GetString());
+        Assert.False(doc.RootElement.TryGetProperty("fields", out _));
+    }
+
+    [Fact]
+    public void Write_FlatMode_NoFields_ValidJson()
+    {
+        var (sink, ms) = MakeFlatSink();
+        sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "m", [], null);
+        using var doc = ParseLine(ms);
+        Assert.Equal("m", doc.RootElement.GetProperty("msg").GetString());
+        Assert.False(doc.RootElement.TryGetProperty("fields", out _));
+    }
+
+    [Fact]
+    public void Write_FlatMode_WithException_FieldsAndErrorCoexist()
+    {
+        var (sink, ms) = MakeFlatSink();
+        var ex = new InvalidOperationException("boom");
+        sink.Write(DateTimeOffset.UtcNow, LogLevel.Error, "fail",
+            [new Field("code", 500)], ex);
+        using var doc = ParseLine(ms);
+        Assert.Equal(500, doc.RootElement.GetProperty("code").GetInt32());
+        Assert.Equal("boom", doc.RootElement.GetProperty("error").GetProperty("msg").GetString());
+    }
+
+    [Fact]
+    public void Write_FlatMode_AllFieldTypes()
+    {
+        var guid = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
+        var dto = new DateTimeOffset(2024, 6, 15, 10, 30, 0, TimeSpan.Zero);
+        var (sink, ms) = MakeFlatSink();
+        sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "m",
+        [
+            new Field("i", 42),
+            new Field("l", 9_999_999_999L),
+            new Field("d", 3.14),
+            new Field("f", 1.5f),
+            new Field("b", true),
+            new Field("s", "hello"),
+            new Field("n", null!),
+            new Field("ts", dto),
+            new Field("g", guid),
+            new Field("dec", 19.99m),
+            new Field("obj", new { x = 1 }),
+        ], null);
+        using var doc = ParseLine(ms);
+        var root = doc.RootElement;
+        Assert.Equal(42, root.GetProperty("i").GetInt32());
+        Assert.Equal(9_999_999_999L, root.GetProperty("l").GetInt64());
+        Assert.Equal(3.14, root.GetProperty("d").GetDouble(), 6);
+        Assert.Equal(1.5, root.GetProperty("f").GetDouble(), 6);
+        Assert.True(root.GetProperty("b").GetBoolean());
+        Assert.Equal("hello", root.GetProperty("s").GetString());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("n").ValueKind);
+        Assert.StartsWith("2024-06-15T10:30:00", root.GetProperty("ts").GetString());
+        Assert.Equal("550e8400-e29b-41d4-a716-446655440000", root.GetProperty("g").GetString());
+        Assert.Equal(19.99m, root.GetProperty("dec").GetDecimal());
+        Assert.Equal(1, root.GetProperty("obj").GetProperty("x").GetInt32());
+    }
+
+    [Fact]
+    public void Write_FlatMode_DefaultConfig_HasNullFieldsKey()
+    {
+        var config = new JsonFormatConfig();
+        Assert.Null(config.FieldsKey);
+    }
+
+    [Fact]
+    public void Write_FlatMode_ConcurrentWrites_AllValidJson()
+    {
+        var ms = new MemoryStream();
+        var sink = new JsonSink(ms);
+        var ts = DateTimeOffset.UtcNow;
+
+        Parallel.For(0, 1000, i =>
+            sink.Write(ts, LogLevel.Info, $"msg-{i}",
+                [new Field("i", i), new Field("s", $"val-{i}")], null));
+
+        ms.Position = 0;
+        var text = Encoding.UTF8.GetString(ms.ToArray());
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(1000, lines.Length);
+        foreach (var line in lines)
+        {
+            using var doc = JsonDocument.Parse(line);
+            Assert.True(doc.RootElement.TryGetProperty("i", out _));
+            Assert.False(doc.RootElement.TryGetProperty("fields", out _));
+        }
     }
 }

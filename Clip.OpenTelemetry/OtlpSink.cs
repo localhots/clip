@@ -225,7 +225,7 @@ public sealed class OtlpSink : ILogSink
             _scopeLogs.LogRecords.Add(record);
         }
 
-        for (var attempt = 0;; attempt++)
+        for (var attempt = 0; ; attempt++)
             try
             {
                 var response = await _exporter.ExportAsync(_request, ct);

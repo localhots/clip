@@ -61,7 +61,7 @@ public class FileSinkTests : IDisposable
     public void Write_WithFields_IncludesFields()
     {
         var path = LogPath();
-        using var sink = new FileSink(path);
+        using var sink = new FileSink(path, format: new JsonFormatConfig { FieldsKey = "fields" });
         sink.Write(FixedTs, LogLevel.Info, "msg",
             [new Field("user", "alice"), new Field("count", 42)], null);
 
@@ -231,7 +231,7 @@ public class FileSinkTests : IDisposable
         var path = LogPath();
         using var logger = Logger.Create(c => c
             .MinimumLevel(LogLevel.Debug)
-            .WriteTo.File(path));
+            .WriteTo.File(path, new JsonFormatConfig { FieldsKey = "fields" }));
 
         logger.Info("from logger", new { Key = "value" });
 

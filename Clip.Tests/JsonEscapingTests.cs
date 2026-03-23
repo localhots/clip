@@ -10,10 +10,12 @@ namespace Clip.Tests;
 /// </summary>
 public class JsonEscapingTests
 {
+    private static readonly JsonFormatConfig NestedConfig = new() { FieldsKey = "fields" };
+
     private static (JsonSink sink, MemoryStream ms) MakeSink()
     {
         var ms = new MemoryStream();
-        return (new JsonSink(ms), ms);
+        return (new JsonSink(NestedConfig, ms), ms);
     }
 
     private static JsonDocument ParseLine(Stream ms)

@@ -46,7 +46,7 @@ public class BackgroundSinkTests
         var ms = new MemoryStream();
         var logger = Logger.Create(c => c
             .MinimumLevel(LogLevel.Trace)
-            .WriteTo.Background(b => b.Json(ms)));
+            .WriteTo.Background(b => b.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms)));
 
         logger.Info("msg", new Field("key", "value"), new Field("num", 42));
         logger.Dispose();

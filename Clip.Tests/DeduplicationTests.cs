@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Clip.Sinks;
 
 namespace Clip.Tests;
 
@@ -25,7 +26,7 @@ public class DeduplicationTests
     public void Context_DuplicateKey_InnerScopeWins()
     {
         var ms = new MemoryStream();
-        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(ms));
+        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms));
         using (Logger.AddContext(new { Key = "outer" }))
         using (Logger.AddContext(new { Key = "inner" }))
         {
@@ -40,7 +41,7 @@ public class DeduplicationTests
     public void CallSite_OverridesContext_SameKey()
     {
         var ms = new MemoryStream();
-        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(ms));
+        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms));
         using (Logger.AddContext(new { A = 1 }))
         {
             logger.Info("msg", new { A = 999 });
@@ -60,7 +61,7 @@ public class DeduplicationTests
         var ms = new MemoryStream();
         var logger = Logger.Create(c => c
             .MinimumLevel(LogLevel.Trace)
-            .WriteTo.Json(ms)
+            .WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms)
             .Enrich.Field("Region", "enricher-value"));
 
         using (Logger.AddContext(new { Region = "context-value" }))
@@ -78,7 +79,7 @@ public class DeduplicationTests
         var ms = new MemoryStream();
         var logger = Logger.Create(c => c
             .MinimumLevel(LogLevel.Trace)
-            .WriteTo.Json(ms)
+            .WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms)
             .Enrich.Field("Region", "enricher-value"));
 
         logger.Info("msg", new { Region = "call-site-value" });
@@ -93,7 +94,7 @@ public class DeduplicationTests
         var ms = new MemoryStream();
         var logger = Logger.Create(c => c
             .MinimumLevel(LogLevel.Trace)
-            .WriteTo.Json(ms)
+            .WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms)
             .Enrich.Field("Key", "first")
             .Enrich.Field("Key", "second"));
 
@@ -112,7 +113,7 @@ public class DeduplicationTests
         var ms = new MemoryStream();
         var logger = Logger.Create(c => c
             .MinimumLevel(LogLevel.Trace)
-            .WriteTo.Json(ms)
+            .WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms)
             .Enrich.Field("Tier", "enricher"));
 
         using (Logger.AddContext(new { Tier = "context" }))
@@ -132,7 +133,7 @@ public class DeduplicationTests
     public void ZeroAlloc_ContextOverriddenByCallSite()
     {
         var ms = new MemoryStream();
-        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(ms));
+        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms));
         using (Logger.AddContext(new { X = 1 }))
         {
             logger.Info("msg", new Field("X", 99));
@@ -148,7 +149,7 @@ public class DeduplicationTests
         var ms = new MemoryStream();
         var logger = Logger.Create(c => c
             .MinimumLevel(LogLevel.Trace)
-            .WriteTo.Json(ms)
+            .WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms)
             .Enrich.Field("E", "enricher"));
 
         logger.Info("msg", new Field("E", "override"));
@@ -165,7 +166,7 @@ public class DeduplicationTests
     public void NoFields_NoEnrichers_NoContext_NoFieldsProperty()
     {
         var ms = new MemoryStream();
-        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(ms));
+        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms));
         logger.Info("msg");
 
         var root = ReadLines(ms)[0].RootElement;
@@ -180,7 +181,7 @@ public class DeduplicationTests
     public void FieldKeys_AreCaseSensitive()
     {
         var ms = new MemoryStream();
-        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(ms));
+        var logger = Logger.Create(c => c.MinimumLevel(LogLevel.Trace).WriteTo.Json(new JsonFormatConfig { FieldsKey = "fields" }, ms));
         using (Logger.AddContext(new { key = "lower" }))
         {
             logger.Info("msg", new { Key = "upper" });
