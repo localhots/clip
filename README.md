@@ -165,6 +165,38 @@ var logger = Logger.Create(c => c
 
 On dispose, the channel is drained so no messages are lost.
 
+### OpenTelemetry (OTLP)
+
+Export structured logs to any OpenTelemetry-compatible backend (Jaeger, Grafana,
+Datadog, etc.) via gRPC or HTTP/protobuf. Separate package with minimal
+dependencies — no OpenTelemetry SDK required.
+
+```bash
+dotnet add package Clip.OpenTelemetry
+```
+
+```csharp
+using Clip.OpenTelemetry;
+
+var logger = Logger.Create(c => c
+    .WriteTo.Otlp(opts => {
+        opts.Endpoint = "http://collector:4317";
+        opts.ServiceName = "my-service";
+    }));
+```
+
+Logs are batched internally and exported on a background thread. Clip fields map
+directly to OTLP attributes, log levels map to OTLP severity numbers. Supports
+`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`,
+`OTEL_EXPORTER_OTLP_HEADERS`, and `OTEL_SERVICE_NAME` environment variables.
+
+To use HTTP/protobuf instead of gRPC:
+
+```csharp
+opts.Protocol = OtlpProtocol.HttpProtobuf;
+opts.Endpoint = "http://collector:4318";
+```
+
 ### Custom Sinks
 
 Implement `ILogSink`:
