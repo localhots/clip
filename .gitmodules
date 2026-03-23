@@ -1,0 +1,3 @@
+[submodule "Clip.OpenTelemetry/proto"]
+	path = Clip.OpenTelemetry/proto
+	url = https://github.com/open-telemetry/opentelemetry-proto
