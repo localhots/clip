@@ -8,5 +8,5 @@ namespace Clip.OpenTelemetry.Export;
 /// </summary>
 internal interface IExporter : IDisposable
 {
-    Task ExportAsync(ExportLogsServiceRequest request, CancellationToken ct);
+    Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct);
 }

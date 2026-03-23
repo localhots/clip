@@ -25,6 +25,14 @@ public sealed class OtlpSink : ILogSink
     private readonly TimeSpan _flushInterval;
     private readonly Task _exportTask;
     private readonly CancellationTokenSource _cts = new();
+    private long _rejectedRecords;
+    private long _failedExports;
+
+    /// <summary>Total number of log records rejected by the collector via partial success responses.</summary>
+    public long RejectedRecords => Interlocked.Read(ref _rejectedRecords);
+
+    /// <summary>Total number of export batches that failed (network error, timeout, etc.).</summary>
+    public long FailedExports => Interlocked.Read(ref _failedExports);
 
     public OtlpSink(OtlpSinkOptions options)
         : this(options, options.Protocol switch
@@ -152,9 +160,10 @@ public sealed class OtlpSink : ILogSink
             {
                 break;
             }
-            catch
+            catch (Exception) when (!ct.IsCancellationRequested)
             {
                 // Export failure must not crash the loop. Entries in the batch are lost.
+                Interlocked.Increment(ref _failedExports);
             }
             finally
             {
@@ -208,7 +217,10 @@ public sealed class OtlpSink : ILogSink
             _scopeLogs.LogRecords.Add(record);
         }
 
-        await _exporter.ExportAsync(_request, ct);
+        var response = await _exporter.ExportAsync(_request, ct);
+
+        if (response.PartialSuccess is { RejectedLogRecords: > 0 } partial)
+            Interlocked.Add(ref _rejectedRecords, partial.RejectedLogRecords);
     }
 
     //

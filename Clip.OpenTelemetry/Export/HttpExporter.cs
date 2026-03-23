@@ -28,7 +28,7 @@ internal sealed class HttpExporter : IExporter
         _exportUri = new Uri($"{baseUri}/v1/logs");
     }
 
-    public async Task ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
+    public async Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(_timeout);
@@ -46,6 +46,11 @@ internal sealed class HttpExporter : IExporter
 
             using var response = await _httpClient.PostAsync(_exportUri, content, cts.Token);
             response.EnsureSuccessStatusCode();
+
+            // Per OTLP spec, 200 response body is always a protobuf-encoded
+            // ExportLogsServiceResponse. Errors (4xx/5xx) are already thrown above.
+            var responseBytes = await response.Content.ReadAsByteArrayAsync(cts.Token);
+            return ExportLogsServiceResponse.Parser.ParseFrom(responseBytes);
         }
         finally
         {

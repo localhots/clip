@@ -25,14 +25,14 @@ internal sealed class GrpcExporter : IExporter
             _headers.Add(key, value);
     }
 
-    public async Task ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
+    public async Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(_timeout);
 
         var callOptions = new CallOptions(_headers, cancellationToken: cts.Token);
         using var call = _client.ExportAsync(request, callOptions);
-        await call.ResponseAsync;
+        return await call.ResponseAsync;
     }
 
     public void Dispose()

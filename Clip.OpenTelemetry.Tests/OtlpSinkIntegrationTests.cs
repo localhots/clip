@@ -181,8 +181,64 @@ public class OtlpSinkIntegrationTests
         Assert.Equal("before dispose", allRecords[0].Body.StringValue);
     }
 
+    [Fact]
+    public async Task Counters_ZeroOnSuccess()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        using var sink = new OtlpSink(options, exporter);
+        sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "ok", ReadOnlySpan<Field>.Empty, null);
+        await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+
+        Assert.Equal(0, sink.RejectedRecords);
+        Assert.Equal(0, sink.FailedExports);
+    }
+
+    [Fact]
+    public async Task FailedExports_IncrementedOnExportFailure()
+    {
+        var exporter = new FailingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        using var sink = new OtlpSink(options, exporter);
+        sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "will fail", ReadOnlySpan<Field>.Empty, null);
+
+        // Wait for the export attempt.
+        await Task.Delay(500);
+
+        Assert.True(sink.FailedExports >= 1);
+    }
+
+    [Fact]
+    public async Task RejectedRecords_IncrementedOnPartialSuccess()
+    {
+        var exporter = new PartialSuccessExporter(rejectedCount: 3);
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        using var sink = new OtlpSink(options, exporter);
+        sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "partial", ReadOnlySpan<Field>.Empty, null);
+
+        await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+
+        Assert.Equal(3, sink.RejectedRecords);
+        Assert.Equal(0, sink.FailedExports);
+    }
+
     //
-    // Test double
+    // Test doubles
     //
 
     /// <summary>
@@ -224,7 +280,7 @@ public class OtlpSinkIntegrationTests
             }
         }
 
-        public Task ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
+        public Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
         {
             // Snapshot the records and resource before the sink clears them.
             var rl = request.ResourceLogs[0];
@@ -234,7 +290,7 @@ public class OtlpSinkIntegrationTests
             lock (_lock)
                 _batches.Add(new ExportBatch(resource, records));
             _signal.Release();
-            return Task.CompletedTask;
+            return Task.FromResult(new ExportLogsServiceResponse());
         }
 
         public async Task WaitForExportsAsync(int count, TimeSpan timeout)
@@ -248,5 +304,41 @@ public class OtlpSinkIntegrationTests
         public void Dispose() => _signal.Dispose();
 
         internal sealed record ExportBatch(Resource Resource, List<LogRecord> Records);
+    }
+
+    private sealed class FailingExporter : IExporter
+    {
+        public Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
+            => throw new HttpRequestException("connection refused");
+
+        public void Dispose() { }
+    }
+
+    private sealed class PartialSuccessExporter(long rejectedCount) : IExporter
+    {
+        private readonly SemaphoreSlim _signal = new(0);
+
+        public Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
+        {
+            var response = new ExportLogsServiceResponse
+            {
+                PartialSuccess = new ExportLogsPartialSuccess
+                {
+                    RejectedLogRecords = rejectedCount,
+                    ErrorMessage = "quota exceeded",
+                },
+            };
+            _signal.Release();
+            return Task.FromResult(response);
+        }
+
+        public async Task WaitForExportsAsync(int count, TimeSpan timeout)
+        {
+            for (var i = 0; i < count; i++)
+                if (!await _signal.WaitAsync(timeout))
+                    throw new TimeoutException($"Expected {count} exports");
+        }
+
+        public void Dispose() => _signal.Dispose();
     }
 }
