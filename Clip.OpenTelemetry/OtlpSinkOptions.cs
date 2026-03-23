@@ -61,25 +61,21 @@ public sealed class OtlpSinkOptions
 
         if (Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL") is { Length: > 0 } proto
             && Protocol == OtlpProtocol.Grpc)
-        {
             Protocol = proto switch
             {
                 "grpc" => OtlpProtocol.Grpc,
                 "http/protobuf" => OtlpProtocol.HttpProtobuf,
                 _ => Protocol,
             };
-        }
 
         if (Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS") is { Length: > 0 } hdrs
             && Headers.Count == 0)
-        {
             foreach (var pair in hdrs.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
                 var eqIdx = pair.IndexOf('=');
                 if (eqIdx > 0)
                     Headers[pair[..eqIdx].Trim()] = pair[(eqIdx + 1)..].Trim();
             }
-        }
 
         if (Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") is { Length: > 0 } svc
             && ServiceName == "unknown_service")

@@ -225,8 +225,7 @@ public sealed class OtlpSink : ILogSink
             _scopeLogs.LogRecords.Add(record);
         }
 
-        for (var attempt = 0; ; attempt++)
-        {
+        for (var attempt = 0;; attempt++)
             try
             {
                 var response = await _exporter.ExportAsync(_request, ct);
@@ -239,8 +238,8 @@ public sealed class OtlpSink : ILogSink
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 var canRetry = _retryPolicy == RetryPolicy.ExponentialBackoff
-                    && attempt < _maxRetries
-                    && RetryClassifier.IsRetryable(ex);
+                               && attempt < _maxRetries
+                               && RetryClassifier.IsRetryable(ex);
 
                 if (!canRetry)
                     throw; // Bubbles to export loop catch → increments FailedExports.
@@ -250,7 +249,6 @@ public sealed class OtlpSink : ILogSink
                 var jitter = Random.Shared.NextDouble() * 0.5 * cappedMs;
                 await Task.Delay(TimeSpan.FromMilliseconds(cappedMs + jitter), ct);
             }
-        }
     }
 
     //

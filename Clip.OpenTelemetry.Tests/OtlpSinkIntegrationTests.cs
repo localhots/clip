@@ -1,6 +1,5 @@
 using Clip.OpenTelemetry.Export;
 using OpenTelemetry.Proto.Collector.Logs.V1;
-using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Logs.V1;
 using OpenTelemetry.Proto.Resource.V1;
 
@@ -22,13 +21,13 @@ public class OtlpSinkIntegrationTests
         {
             ReadOnlySpan<Field> fields =
             [
-                new Field("host", "localhost"),
-                new Field("port", 8080),
+                new("host", "localhost"),
+                new("port", 8080),
             ];
             sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "Server started", fields, null);
 
             // Wait for the background export.
-            await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
         }
 
         Assert.Single(exporter.Requests);
@@ -62,7 +61,7 @@ public class OtlpSinkIntegrationTests
                 sink.Write(DateTimeOffset.UtcNow, LogLevel.Debug, $"msg {i}",
                     ReadOnlySpan<Field>.Empty, null);
 
-            await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
         }
 
         Assert.Single(exporter.Requests);
@@ -86,7 +85,7 @@ public class OtlpSinkIntegrationTests
             sink.Write(DateTimeOffset.UtcNow, LogLevel.Error, "Failed",
                 ReadOnlySpan<Field>.Empty, ex);
 
-            await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
         }
 
         var record = exporter.Requests[0].ResourceLogs[0].ScopeLogs[0].LogRecords[0];
@@ -94,9 +93,9 @@ public class OtlpSinkIntegrationTests
 
         var attrs = record.Attributes;
         Assert.Contains(attrs, a => a.Key == "exception.type"
-            && a.Value.StringValue == "System.InvalidOperationException");
+                                    && a.Value.StringValue == "System.InvalidOperationException");
         Assert.Contains(attrs, a => a.Key == "exception.message"
-            && a.Value.StringValue == "test error");
+                                    && a.Value.StringValue == "test error");
         Assert.Contains(attrs, a => a.Key == "exception.stacktrace");
     }
 
@@ -117,7 +116,7 @@ public class OtlpSinkIntegrationTests
             sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "hello",
                 ReadOnlySpan<Field>.Empty, null);
 
-            await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
         }
 
         var resource = exporter.Requests[0].ResourceLogs[0].Resource;
@@ -144,7 +143,7 @@ public class OtlpSinkIntegrationTests
                 ReadOnlySpan<Field>.Empty, null);
 
             // Flush interval should trigger export before batch is full.
-            await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
         }
 
         Assert.Single(exporter.Requests);
@@ -193,7 +192,7 @@ public class OtlpSinkIntegrationTests
 
         using var sink = new OtlpSink(options, exporter);
         sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "ok", ReadOnlySpan<Field>.Empty, null);
-        await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+        await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
 
         Assert.Equal(0, sink.RejectedRecords);
         Assert.Equal(0, sink.FailedExports);
@@ -221,7 +220,7 @@ public class OtlpSinkIntegrationTests
     [Fact]
     public async Task RejectedRecords_IncrementedOnPartialSuccess()
     {
-        var exporter = new PartialSuccessExporter(rejectedCount: 3);
+        var exporter = new PartialSuccessExporter(3);
         var options = new OtlpSinkOptions
         {
             BatchSize = 1,
@@ -231,7 +230,7 @@ public class OtlpSinkIntegrationTests
         using var sink = new OtlpSink(options, exporter);
         sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "partial", ReadOnlySpan<Field>.Empty, null);
 
-        await exporter.WaitForExportsAsync(1, timeout: TimeSpan.FromSeconds(2));
+        await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
 
         Assert.Equal(3, sink.RejectedRecords);
         Assert.Equal(0, sink.FailedExports);
@@ -257,7 +256,9 @@ public class OtlpSinkIntegrationTests
             get
             {
                 lock (_lock)
+                {
                     return [.. _batches];
+                }
             }
         }
 
@@ -267,6 +268,7 @@ public class OtlpSinkIntegrationTests
             get
             {
                 lock (_lock)
+                {
                     return _batches.Select(b =>
                     {
                         var scopeLogs = new ScopeLogs();
@@ -277,6 +279,7 @@ public class OtlpSinkIntegrationTests
                         req.ResourceLogs.Add(resourceLogs);
                         return req;
                     }).ToList();
+                }
             }
         }
 
@@ -288,7 +291,10 @@ public class OtlpSinkIntegrationTests
             var resource = rl.Resource;
 
             lock (_lock)
+            {
                 _batches.Add(new ExportBatch(resource, records));
+            }
+
             _signal.Release();
             return Task.FromResult(new ExportLogsServiceResponse());
         }
@@ -301,7 +307,10 @@ public class OtlpSinkIntegrationTests
                         $"Expected {count} exports, got {_batches.Count} after {timeout}");
         }
 
-        public void Dispose() => _signal.Dispose();
+        public void Dispose()
+        {
+            _signal.Dispose();
+        }
 
         internal sealed record ExportBatch(Resource Resource, List<LogRecord> Records);
     }
@@ -309,9 +318,13 @@ public class OtlpSinkIntegrationTests
     private sealed class FailingExporter : IExporter
     {
         public Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
-            => throw new HttpRequestException("connection refused");
+        {
+            throw new HttpRequestException("connection refused");
+        }
 
-        public void Dispose() { }
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class PartialSuccessExporter(long rejectedCount) : IExporter
@@ -339,6 +352,9 @@ public class OtlpSinkIntegrationTests
                     throw new TimeoutException($"Expected {count} exports");
         }
 
-        public void Dispose() => _signal.Dispose();
+        public void Dispose()
+        {
+            _signal.Dispose();
+        }
     }
 }

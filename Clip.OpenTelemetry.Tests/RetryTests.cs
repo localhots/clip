@@ -6,20 +6,23 @@ namespace Clip.OpenTelemetry.Tests;
 
 public class RetryTests
 {
-    private static OtlpSinkOptions RetryOptions(RetryPolicy policy = RetryPolicy.ExponentialBackoff) => new()
+    private static OtlpSinkOptions RetryOptions(RetryPolicy policy = RetryPolicy.ExponentialBackoff)
     {
-        BatchSize = 1,
-        FlushInterval = TimeSpan.FromMilliseconds(50),
-        RetryPolicy = policy,
-        MaxRetries = 3,
-        RetryBaseDelay = TimeSpan.FromMilliseconds(10),
-        RetryMaxDelay = TimeSpan.FromMilliseconds(100),
-    };
+        return new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+            RetryPolicy = policy,
+            MaxRetries = 3,
+            RetryBaseDelay = TimeSpan.FromMilliseconds(10),
+            RetryMaxDelay = TimeSpan.FromMilliseconds(100),
+        };
+    }
 
     [Fact]
     public async Task Retry_SucceedsAfterTransientFailure()
     {
-        var exporter = new CountingExporter(failCount: 2, retryable: true);
+        var exporter = new CountingExporter(2, true);
 
         using var sink = new OtlpSink(RetryOptions(), exporter);
         sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "retry me", ReadOnlySpan<Field>.Empty, null);
@@ -33,7 +36,7 @@ public class RetryTests
     [Fact]
     public async Task Retry_DropsOnNonRetryableError()
     {
-        var exporter = new CountingExporter(failCount: 100, retryable: false);
+        var exporter = new CountingExporter(100, false);
 
         using var sink = new OtlpSink(RetryOptions(), exporter);
         sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "bad request", ReadOnlySpan<Field>.Empty, null);
@@ -47,7 +50,7 @@ public class RetryTests
     [Fact]
     public async Task Retry_DropsAfterMaxRetries()
     {
-        var exporter = new CountingExporter(failCount: 100, retryable: true);
+        var exporter = new CountingExporter(100, true);
 
         using var sink = new OtlpSink(RetryOptions(), exporter);
         sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "always fails", ReadOnlySpan<Field>.Empty, null);
@@ -61,7 +64,7 @@ public class RetryTests
     [Fact]
     public async Task Retry_None_DropsImmediately()
     {
-        var exporter = new CountingExporter(failCount: 100, retryable: true);
+        var exporter = new CountingExporter(100, true);
 
         using var sink = new OtlpSink(RetryOptions(RetryPolicy.None), exporter);
         sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "no retry", ReadOnlySpan<Field>.Empty, null);
@@ -75,7 +78,7 @@ public class RetryTests
     [Fact]
     public async Task Retry_BackoffDelayIncreases()
     {
-        var exporter = new TimingExporter(failCount: 3);
+        var exporter = new TimingExporter(3);
 
         using var sink = new OtlpSink(RetryOptions(), exporter);
         sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "timing", ReadOnlySpan<Field>.Empty, null);
@@ -130,7 +133,10 @@ public class RetryTests
                 throw new TimeoutException("Export never succeeded");
         }
 
-        public void Dispose() => _success.Dispose();
+        public void Dispose()
+        {
+            _success.Dispose();
+        }
     }
 
     /// <summary>
@@ -146,14 +152,18 @@ public class RetryTests
             get
             {
                 lock (_lock)
+                {
                     return [.. _timestamps];
+                }
             }
         }
 
         public Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
         {
             lock (_lock)
+            {
                 _timestamps.Add(DateTimeOffset.UtcNow);
+            }
 
             if (_timestamps.Count <= failCount)
                 throw new HttpRequestException("unavailable", null, HttpStatusCode.ServiceUnavailable);
@@ -161,6 +171,8 @@ public class RetryTests
             return Task.FromResult(new ExportLogsServiceResponse());
         }
 
-        public void Dispose() { }
+        public void Dispose()
+        {
+        }
     }
 }
