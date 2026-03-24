@@ -630,7 +630,7 @@ public class ToxicInputTests
 
     private sealed class ThrowingRedactor : ILogRedactor
     {
-        public void Redact(Span<Field> fields)
+        public void Redact(ref Field field)
         {
             throw new InvalidOperationException("Redactor exploded");
         }

@@ -248,10 +248,9 @@ public class FieldFilterTests
     {
         public List<string> SeenKeys { get; } = [];
 
-        public void Redact(Span<Field> fields)
+        public void Redact(ref Field field)
         {
-            for (var i = 0; i < fields.Length; i++)
-                SeenKeys.Add(fields[i].Key);
+            SeenKeys.Add(field.Key);
         }
     }
 

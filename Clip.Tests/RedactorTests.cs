@@ -275,7 +275,7 @@ public class RedactorTests
 
     private class BoomRedactor : ILogRedactor
     {
-        public void Redact(Span<Field> fields)
+        public void Redact(ref Field field)
         {
             throw new InvalidOperationException("boom");
         }
@@ -283,15 +283,12 @@ public class RedactorTests
 
     private class UpperCaseRedactor : ILogRedactor
     {
-        public void Redact(Span<Field> fields)
+        public void Redact(ref Field field)
         {
-            for (var i = 0; i < fields.Length; i++)
-            {
-                if (fields[i].Type != FieldType.String) continue;
-                var value = (string?)fields[i].RefValue;
-                if (value is null) continue;
-                fields[i] = new Field(fields[i].Key, value.ToUpperInvariant());
-            }
+            if (field.Type != FieldType.String) return;
+            var value = (string?)field.RefValue;
+            if (value is null) return;
+            field = new Field(field.Key, value.ToUpperInvariant());
         }
     }
 }
