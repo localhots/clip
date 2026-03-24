@@ -1,16 +1,11 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Clip.Context;
+using Clip.Enrichers;
 using Clip.Fields;
 using Clip.Sinks;
 
 namespace Clip;
-
-internal readonly struct EnricherEntry(ILogEnricher enricher, LogLevel minLevel)
-{
-    public readonly ILogEnricher Enricher = enricher;
-    public readonly LogLevel MinLevel = minLevel;
-}
 
 /// <summary>
 /// The concrete logger. Implements both <see cref="ILogger"/> (ergonomic, reflection-based)
@@ -22,6 +17,7 @@ public sealed class Logger : ILogger, IZeroLogger
     private readonly SinkEntry[] _sinks;
     private readonly EnricherEntry[]? _enrichers;
     private readonly ILogRedactor[]? _redactors;
+    private readonly ILogFilter[]? _filters;
 
     /// <summary>The global minimum log level. Calls below this level are no-ops.</summary>
     public LogLevel MinLevel { get; }
@@ -32,12 +28,14 @@ public sealed class Logger : ILogger, IZeroLogger
         public readonly LogLevel MinLevel = minLevel;
     }
 
-    private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors)
+    private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors,
+        ILogFilter[]? filters)
     {
         MinLevel = minLevel;
         _sinks = sinks;
         _enrichers = enrichers;
         _redactors = redactors;
+        _filters = filters;
     }
 
     /// <summary>
@@ -63,7 +61,8 @@ public sealed class Logger : ILogger, IZeroLogger
         var sinks = new SinkEntry[raw.Length];
         for (var i = 0; i < raw.Length; i++)
             sinks[i] = new SinkEntry(raw[i].Sink, raw[i].MinLevel);
-        return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build());
+        return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build(),
+            config.Filter.Build());
     }
 
 
@@ -158,12 +157,11 @@ public sealed class Logger : ILogger, IZeroLogger
         try
         {
             ApplyEnrichers(list, LogLevel.Fatal);
-            var enricherCount = list.Count;
-            MergeFields(fields, list);
-            if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
+            LogScope.CopyCurrentTo(list);
+            if (fields != null) FieldExtractor.ExtractInto(fields, list);
             var span = CollectionsMarshal.AsSpan(list);
-            ApplyRedactors(span);
-            WriteTo(LogLevel.Fatal, message, span, null);
+            var count = ProcessFields(span);
+            WriteTo(LogLevel.Fatal, message, span[..count], null);
         }
         finally
         {
@@ -236,7 +234,8 @@ public sealed class Logger : ILogger, IZeroLogger
     {
         try
         {
-            if (fields == null && !LogScope.HasCurrent && _enrichers == null && _redactors == null)
+            if (fields == null && !LogScope.HasCurrent && _enrichers == null && _redactors == null
+                && _filters == null)
             {
                 WriteTo(level, message, ReadOnlySpan<Field>.Empty, exception);
                 return;
@@ -246,12 +245,11 @@ public sealed class Logger : ILogger, IZeroLogger
             try
             {
                 ApplyEnrichers(list, level);
-                var enricherCount = list.Count;
-                MergeFields(fields, list);
-                if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
+                LogScope.CopyCurrentTo(list);
+                if (fields != null) FieldExtractor.ExtractInto(fields, list);
                 var span = CollectionsMarshal.AsSpan(list);
-                ApplyRedactors(span);
-                WriteTo(level, message, span, exception);
+                var count = ProcessFields(span);
+                WriteTo(level, message, span[..count], exception);
             }
             finally
             {
@@ -276,7 +274,7 @@ public sealed class Logger : ILogger, IZeroLogger
     {
         try
         {
-            if (!LogScope.HasCurrent && _enrichers == null && _redactors == null)
+            if (!LogScope.HasCurrent && _enrichers == null && _redactors == null && _filters == null)
             {
                 WriteTo(level, message, fields, exception);
                 return;
@@ -286,13 +284,11 @@ public sealed class Logger : ILogger, IZeroLogger
             try
             {
                 ApplyEnrichers(list, level);
-                var enricherCount = list.Count;
                 LogScope.CopyCurrentTo(list);
                 foreach (var f in fields) list.Add(f);
-                if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
                 var span = CollectionsMarshal.AsSpan(list);
-                ApplyRedactors(span);
-                WriteTo(level, message, span, exception);
+                var count = ProcessFields(span);
+                WriteTo(level, message, span[..count], exception);
             }
             finally
             {
@@ -303,33 +299,6 @@ public sealed class Logger : ILogger, IZeroLogger
         {
             // A log call must never crash the application.
         }
-    }
-
-    private static void MergeFields(object? callSiteFields, List<Field> target)
-    {
-        // 1. Context fields first (lower priority)
-        LogScope.CopyCurrentTo(target);
-
-        // 2. Call-site fields second (overwrite on a duplicate key)
-        if (callSiteFields == null) return;
-        var before = target.Count;
-        FieldExtractor.ExtractInto(callSiteFields, target);
-        // Deduplicate: call-site fields (at indices >= before) win
-        if (before > 0) DeduplicateFields(target, before);
-    }
-
-    private static void DeduplicateFields(List<Field> fields, int newFieldsStart)
-    {
-        var span = CollectionsMarshal.AsSpan(fields);
-        for (var i = newFieldsStart; i < span.Length; i++)
-            for (var j = 0; j < newFieldsStart; j++)
-            {
-                if (span[j].Key != span[i].Key) continue;
-                fields.RemoveAt(j);
-                newFieldsStart--;
-                i--;
-                break;
-            }
     }
 
     private void ApplyEnrichers(List<Field> target, LogLevel level)
@@ -349,35 +318,61 @@ public sealed class Logger : ILogger, IZeroLogger
         }
     }
 
-    private void ApplyRedactors(Span<Field> fields)
+    //
+    // Single-pass field processing: filter, deduplicate, redact
+    //
+
+    private int ProcessFields(Span<Field> fields)
+    {
+        var write = 0;
+        for (var i = 0; i < fields.Length; i++)
+        {
+            var key = fields[i].Key;
+            if (IsFiltered(key)) continue;
+            if (HasLaterDuplicate(fields, i)) continue;
+
+            fields[write] = fields[i];
+            ApplyRedactors(ref fields[write]);
+            write++;
+        }
+        return write;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsFiltered(string key)
+    {
+        if (_filters == null) return false;
+        foreach (var filter in _filters)
+            try
+            {
+                if (filter.ShouldSkip(key)) return true;
+            }
+            catch
+            {
+                // Filter failure must not crash the pipeline
+            }
+        return false;
+    }
+
+    private static bool HasLaterDuplicate(Span<Field> fields, int index)
+    {
+        var key = fields[index].Key;
+        for (var j = index + 1; j < fields.Length; j++)
+            if (fields[j].Key == key) return true;
+        return false;
+    }
+
+    private void ApplyRedactors(ref Field field)
     {
         if (_redactors == null) return;
         foreach (var redactor in _redactors)
             try
             {
-                redactor.Redact(fields);
+                redactor.Redact(ref field);
             }
             catch
             {
                 // Redactor failure must not crash the pipeline
-            }
-    }
-
-    /// <summary>
-    /// Removes enricher fields (at indices 0..enricherCount-1) whose key
-    /// collides with any later field (context or call-site wins).
-    /// </summary>
-    private static void DeduplicateEnricherFields(List<Field> fields, int enricherCount)
-    {
-        var span = CollectionsMarshal.AsSpan(fields);
-        for (var i = enricherCount - 1; i >= 0; i--)
-            for (var j = enricherCount; j < span.Length; j++)
-            {
-                if (span[i].Key != span[j].Key) continue;
-                fields.RemoveAt(i);
-                enricherCount--;
-                span = CollectionsMarshal.AsSpan(fields);
-                break;
             }
     }
 

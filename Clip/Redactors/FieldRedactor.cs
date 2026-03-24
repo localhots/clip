@@ -8,10 +8,9 @@ public sealed class FieldRedactor(IEnumerable<string> fields, string mask = "***
 {
     private readonly HashSet<string> _fields = new(fields, StringComparer.OrdinalIgnoreCase);
 
-    public void Redact(Span<Field> fields)
+    public void Redact(ref Field field)
     {
-        for (var i = 0; i < fields.Length; i++)
-            if (_fields.Contains(fields[i].Key))
-                fields[i] = new Field(fields[i].Key, mask);
+        if (_fields.Contains(field.Key))
+            field = new Field(field.Key, mask);
     }
 }

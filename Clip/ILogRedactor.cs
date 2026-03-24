@@ -1,12 +1,12 @@
 namespace Clip;
 
 /// <summary>
-/// Inspects the final merged field list and redacts sensitive values.
-/// Runs after all fields (enricher + context + call-site) are merged and deduplicated.
-/// To redact a field, replace it at its index: fields[i] = new Field(key, masked).
+/// Redacts a single field value. Called for each field after filtering and deduplication.
+/// To redact, assign a new value: <c>field = new Field(field.Key, "***")</c>.
+/// If the field should not be redacted, leave it unchanged.
 /// Implementations must be thread-safe.
 /// </summary>
 public interface ILogRedactor
 {
-    void Redact(Span<Field> fields);
+    void Redact(ref Field field);
 }

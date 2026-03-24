@@ -242,10 +242,33 @@ c.Enrich.With(new RequestBodyEnricher(), minLevel: LogLevel.Warning)
 Enricher fields have the lowest priority — context and call-site fields override
 them on key collision.
 
+## Filters
+
+Exclude fields entirely — filtered fields never reach redactors or sinks.
+
+```csharp
+var logger = Logger.Create(c => c
+    .Filter.Fields("_internal", "debug_trace")
+    .Filter.Pattern(@"^temp_")
+    .WriteTo.Console());
+```
+
+Custom filters implement `ILogFilter`:
+
+```csharp
+public class PrefixFilter(string prefix) : ILogFilter
+{
+    public bool ShouldSkip(string key) => key.StartsWith(prefix);
+}
+
+// Register: .Filter.With(new PrefixFilter("_"))
+```
+
 ## Redactors
 
 Scrub sensitive values before they reach any sink. Runs after all fields are
-merged.
+merged. Unlike filters (which remove fields), redactors replace values — the
+field key remains visible.
 
 ```csharp
 var logger = Logger.Create(c => c
