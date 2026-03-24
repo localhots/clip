@@ -157,7 +157,8 @@ public sealed class Logger : ILogger, IZeroLogger
         try
         {
             ApplyEnrichers(list, LogLevel.Fatal);
-            MergeFields(fields, list);
+            LogScope.CopyCurrentTo(list);
+            if (fields != null) FieldExtractor.ExtractInto(fields, list);
             var span = CollectionsMarshal.AsSpan(list);
             var count = ProcessFields(span);
             WriteTo(LogLevel.Fatal, message, span[..count], null);
@@ -244,7 +245,8 @@ public sealed class Logger : ILogger, IZeroLogger
             try
             {
                 ApplyEnrichers(list, level);
-                MergeFields(fields, list);
+                LogScope.CopyCurrentTo(list);
+                if (fields != null) FieldExtractor.ExtractInto(fields, list);
                 var span = CollectionsMarshal.AsSpan(list);
                 var count = ProcessFields(span);
                 WriteTo(level, message, span[..count], exception);
@@ -297,12 +299,6 @@ public sealed class Logger : ILogger, IZeroLogger
         {
             // A log call must never crash the application.
         }
-    }
-
-    private static void MergeFields(object? callSiteFields, List<Field> target)
-    {
-        LogScope.CopyCurrentTo(target);
-        if (callSiteFields != null) FieldExtractor.ExtractInto(callSiteFields, target);
     }
 
     private void ApplyEnrichers(List<Field> target, LogLevel level)
