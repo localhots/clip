@@ -98,8 +98,9 @@ pkg:
 	@rm -rf pkg
 	@mkdir -p pkg
 	dotnet pack Clip/Clip.csproj -c Release -o pkg --nologo -v q
-	dotnet pack Clip.Analyzers/Clip.Analyzers.csproj -c Release -o pkg --nologo -v q
+	dotnet pack Clip.OpenTelemetry/Clip.OpenTelemetry.csproj -c Release -o pkg --nologo -v q
 	dotnet pack Clip.Extensions.Logging/Clip.Extensions.Logging.csproj -c Release -o pkg --nologo -v q
+	dotnet pack Clip.Analyzers/Clip.Analyzers.csproj -c Release -o pkg --nologo -v q
 	@echo ""
 	@ls -lh pkg/*.nupkg
 

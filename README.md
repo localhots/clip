@@ -65,6 +65,15 @@ caller.
 
 - [.NET 9.0](https://dotnet.microsoft.com/download/dotnet/9.0) or later
 
+## Install
+
+```bash
+dotnet add package Clip
+```
+
+Packages are published to [NuGet.org](https://www.nuget.org/packages/Clip) and
+[GitHub Packages](https://github.com/localhots?tab=packages&repo_name=clip).
+
 ## Quick Start
 
 ```csharp
