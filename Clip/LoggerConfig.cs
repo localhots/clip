@@ -1,3 +1,4 @@
+using Clip.Enrichers;
 using Clip.Redactors;
 using Clip.Sinks;
 using System.Text.RegularExpressions;
@@ -146,10 +147,6 @@ public sealed class EnricherConfig
         return _parent;
     }
 
-    private sealed class ConstantEnricher(Field field) : ILogEnricher
-    {
-        public void Enrich(List<Field> target) => target.Add(field);
-    }
 }
 
 /// <summary>
@@ -361,37 +358,15 @@ public sealed class SinkConfig
 public sealed class FilterConfig
 {
     private readonly LoggerConfig _parent;
-    private readonly List<ILogFieldFilter> _filters = [];
+    private readonly List<ILogFilter> _filters = [];
 
     internal FilterConfig(LoggerConfig parent) => _parent = parent;
 
-    internal (HashSet<string>? Names, ILogFieldFilter[]? Custom) Build()
-    {
-        if (_filters.Count == 0) return (null, null);
+    internal ILogFilter[]? Build() => _filters.Count == 0 ? null : [.. _filters];
 
-        HashSet<string>? names = null;
-        List<ILogFieldFilter>? custom = null;
-
-        foreach (var filter in _filters)
-        {
-            if (filter is Filters.FieldNameFilter nf)
-            {
-                names ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var key in nf.Keys) names.Add(key);
-            }
-            else
-            {
-                custom ??= [];
-                custom.Add(filter);
-            }
-        }
-
-        return (names, custom?.Count > 0 ? [.. custom] : null);
-    }
-
-    /// <summary>Registers a custom <see cref="ILogFieldFilter"/>. Must be thread-safe.</summary>
+    /// <summary>Registers a custom <see cref="ILogFilter"/>. Must be thread-safe.</summary>
     /// <param name="filter">The filter instance.</param>
-    public LoggerConfig With(ILogFieldFilter filter)
+    public LoggerConfig With(ILogFilter filter)
     {
         _filters.Add(filter);
         return _parent;

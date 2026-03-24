@@ -253,10 +253,10 @@ var logger = Logger.Create(c => c
     .WriteTo.Console());
 ```
 
-Custom filters implement `ILogFieldFilter`:
+Custom filters implement `ILogFilter`:
 
 ```csharp
-public class PrefixFilter(string prefix) : ILogFieldFilter
+public class PrefixFilter(string prefix) : ILogFilter
 {
     public bool ShouldSkip(string key) => key.StartsWith(prefix);
 }

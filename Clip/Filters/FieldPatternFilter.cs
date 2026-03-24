@@ -5,7 +5,7 @@ namespace Clip.Filters;
 /// <summary>
 /// Filters fields whose key matches a regex pattern. Any field whose key matches is skipped.
 /// </summary>
-public sealed class FieldPatternFilter : ILogFieldFilter
+public sealed class FieldPatternFilter : ILogFilter
 {
     private readonly Regex _pattern;
 

@@ -256,7 +256,7 @@ public class FieldFilterTests
     }
 
     /// <summary>Filters fields whose key starts with a prefix.</summary>
-    private sealed class PrefixFilter(string prefix) : ILogFieldFilter
+    private sealed class PrefixFilter(string prefix) : ILogFilter
     {
         public bool ShouldSkip(string key) => key.StartsWith(prefix, StringComparison.Ordinal);
     }

@@ -1,16 +1,11 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Clip.Context;
+using Clip.Enrichers;
 using Clip.Fields;
 using Clip.Sinks;
 
 namespace Clip;
-
-internal readonly struct EnricherEntry(ILogEnricher enricher, LogLevel minLevel)
-{
-    public readonly ILogEnricher Enricher = enricher;
-    public readonly LogLevel MinLevel = minLevel;
-}
 
 /// <summary>
 /// The concrete logger. Implements both <see cref="ILogger"/> (ergonomic, reflection-based)
@@ -22,8 +17,7 @@ public sealed class Logger : ILogger, IZeroLogger
     private readonly SinkEntry[] _sinks;
     private readonly EnricherEntry[]? _enrichers;
     private readonly ILogRedactor[]? _redactors;
-    private readonly HashSet<string>? _filteredNames;
-    private readonly ILogFieldFilter[]? _customFilters;
+    private readonly ILogFilter[]? _filters;
 
     /// <summary>The global minimum log level. Calls below this level are no-ops.</summary>
     public LogLevel MinLevel { get; }
@@ -35,14 +29,13 @@ public sealed class Logger : ILogger, IZeroLogger
     }
 
     private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors,
-        HashSet<string>? filteredNames, ILogFieldFilter[]? customFilters)
+        ILogFilter[]? filters)
     {
         MinLevel = minLevel;
         _sinks = sinks;
         _enrichers = enrichers;
         _redactors = redactors;
-        _filteredNames = filteredNames;
-        _customFilters = customFilters;
+        _filters = filters;
     }
 
     /// <summary>
@@ -68,9 +61,8 @@ public sealed class Logger : ILogger, IZeroLogger
         var sinks = new SinkEntry[raw.Length];
         for (var i = 0; i < raw.Length; i++)
             sinks[i] = new SinkEntry(raw[i].Sink, raw[i].MinLevel);
-        var (filterNames, customFilters) = config.Filter.Build();
         return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build(),
-            filterNames, customFilters);
+            config.Filter.Build());
     }
 
 
@@ -245,7 +237,7 @@ public sealed class Logger : ILogger, IZeroLogger
         try
         {
             if (fields == null && !LogScope.HasCurrent && _enrichers == null && _redactors == null
-                && _filteredNames == null && _customFilters == null)
+                && _filters == null)
             {
                 WriteTo(level, message, ReadOnlySpan<Field>.Empty, exception);
                 return;
@@ -286,7 +278,7 @@ public sealed class Logger : ILogger, IZeroLogger
     {
         try
         {
-            if (!LogScope.HasCurrent && _enrichers == null && _redactors == null && _filteredNames == null && _customFilters == null)
+            if (!LogScope.HasCurrent && _enrichers == null && _redactors == null && _filters == null)
             {
                 WriteTo(level, message, fields, exception);
                 return;
@@ -366,32 +358,24 @@ public sealed class Logger : ILogger, IZeroLogger
     /// </summary>
     private int RemoveFilteredFields(List<Field> fields, int enricherCount)
     {
-        if (_filteredNames == null && _customFilters == null) return enricherCount;
+        if (_filters == null) return enricherCount;
         for (var i = fields.Count - 1; i >= 0; i--)
         {
-            if (!IsFiltered(fields[i].Key)) continue;
-            fields.RemoveAt(i);
-            if (i < enricherCount) enricherCount--;
+            var key = fields[i].Key;
+            foreach (var filter in _filters)
+                try
+                {
+                    if (!filter.ShouldSkip(key)) continue;
+                    fields.RemoveAt(i);
+                    if (i < enricherCount) enricherCount--;
+                    break;
+                }
+                catch
+                {
+                    // Filter failure must not crash the pipeline
+                }
         }
         return enricherCount;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool IsFiltered(string key)
-    {
-        // Fast path: name lookup is a single HashSet.Contains — no virtual dispatch
-        if (_filteredNames != null && _filteredNames.Contains(key)) return true;
-        if (_customFilters == null) return false;
-        foreach (var filter in _customFilters)
-            try
-            {
-                if (filter.ShouldSkip(key)) return true;
-            }
-            catch
-            {
-                // Filter failure must not crash the pipeline
-            }
-        return false;
     }
 
     private void ApplyRedactors(Span<Field> fields)
