@@ -22,6 +22,8 @@ public sealed class Logger : ILogger, IZeroLogger
     private readonly SinkEntry[] _sinks;
     private readonly EnricherEntry[]? _enrichers;
     private readonly ILogRedactor[]? _redactors;
+    private readonly HashSet<string>? _filteredNames;
+    private readonly ILogFieldFilter[]? _customFilters;
 
     /// <summary>The global minimum log level. Calls below this level are no-ops.</summary>
     public LogLevel MinLevel { get; }
@@ -32,12 +34,15 @@ public sealed class Logger : ILogger, IZeroLogger
         public readonly LogLevel MinLevel = minLevel;
     }
 
-    private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors)
+    private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors,
+        HashSet<string>? filteredNames, ILogFieldFilter[]? customFilters)
     {
         MinLevel = minLevel;
         _sinks = sinks;
         _enrichers = enrichers;
         _redactors = redactors;
+        _filteredNames = filteredNames;
+        _customFilters = customFilters;
     }
 
     /// <summary>
@@ -63,7 +68,9 @@ public sealed class Logger : ILogger, IZeroLogger
         var sinks = new SinkEntry[raw.Length];
         for (var i = 0; i < raw.Length; i++)
             sinks[i] = new SinkEntry(raw[i].Sink, raw[i].MinLevel);
-        return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build());
+        var (filterNames, customFilters) = config.Filter.Build();
+        return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build(),
+            filterNames, customFilters);
     }
 
 
@@ -160,6 +167,7 @@ public sealed class Logger : ILogger, IZeroLogger
             ApplyEnrichers(list, LogLevel.Fatal);
             var enricherCount = list.Count;
             MergeFields(fields, list);
+            enricherCount = RemoveFilteredFields(list, enricherCount);
             if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
             var span = CollectionsMarshal.AsSpan(list);
             ApplyRedactors(span);
@@ -236,7 +244,8 @@ public sealed class Logger : ILogger, IZeroLogger
     {
         try
         {
-            if (fields == null && !LogScope.HasCurrent && _enrichers == null && _redactors == null)
+            if (fields == null && !LogScope.HasCurrent && _enrichers == null && _redactors == null
+                && _filteredNames == null && _customFilters == null)
             {
                 WriteTo(level, message, ReadOnlySpan<Field>.Empty, exception);
                 return;
@@ -248,6 +257,7 @@ public sealed class Logger : ILogger, IZeroLogger
                 ApplyEnrichers(list, level);
                 var enricherCount = list.Count;
                 MergeFields(fields, list);
+                enricherCount = RemoveFilteredFields(list, enricherCount);
                 if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
                 var span = CollectionsMarshal.AsSpan(list);
                 ApplyRedactors(span);
@@ -276,7 +286,7 @@ public sealed class Logger : ILogger, IZeroLogger
     {
         try
         {
-            if (!LogScope.HasCurrent && _enrichers == null && _redactors == null)
+            if (!LogScope.HasCurrent && _enrichers == null && _redactors == null && _filteredNames == null && _customFilters == null)
             {
                 WriteTo(level, message, fields, exception);
                 return;
@@ -289,6 +299,7 @@ public sealed class Logger : ILogger, IZeroLogger
                 var enricherCount = list.Count;
                 LogScope.CopyCurrentTo(list);
                 foreach (var f in fields) list.Add(f);
+                enricherCount = RemoveFilteredFields(list, enricherCount);
                 if (enricherCount > 0) DeduplicateEnricherFields(list, enricherCount);
                 var span = CollectionsMarshal.AsSpan(list);
                 ApplyRedactors(span);
@@ -347,6 +358,40 @@ public sealed class Logger : ILogger, IZeroLogger
                 // Enricher failure must not crash the pipeline
             }
         }
+    }
+
+    /// <summary>
+    /// Removes fields that match any registered filter. Returns the adjusted
+    /// enricher count (decremented for each enricher-region field removed).
+    /// </summary>
+    private int RemoveFilteredFields(List<Field> fields, int enricherCount)
+    {
+        if (_filteredNames == null && _customFilters == null) return enricherCount;
+        for (var i = fields.Count - 1; i >= 0; i--)
+        {
+            if (!IsFiltered(fields[i].Key)) continue;
+            fields.RemoveAt(i);
+            if (i < enricherCount) enricherCount--;
+        }
+        return enricherCount;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsFiltered(string key)
+    {
+        // Fast path: name lookup is a single HashSet.Contains — no virtual dispatch
+        if (_filteredNames != null && _filteredNames.Contains(key)) return true;
+        if (_customFilters == null) return false;
+        foreach (var filter in _customFilters)
+            try
+            {
+                if (filter.ShouldSkip(key)) return true;
+            }
+            catch
+            {
+                // Filter failure must not crash the pipeline
+            }
+        return false;
     }
 
     private void ApplyRedactors(Span<Field> fields)

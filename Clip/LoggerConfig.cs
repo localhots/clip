@@ -33,11 +33,15 @@ public sealed class LoggerConfig
     /// <summary>Configures redaction rules applied to field values before they reach sinks.</summary>
     public RedactorConfig Redact { get; }
 
+    /// <summary>Configures field filters that prevent matching fields from reaching sinks.</summary>
+    public FilterConfig Filter { get; }
+
     public LoggerConfig()
     {
         WriteTo = new SinkConfig(this);
         Enrich = new EnricherConfig(this);
         Redact = new RedactorConfig(this);
+        Filter = new FilterConfig(this);
     }
 
     /// <summary>
@@ -346,6 +350,78 @@ public sealed class SinkConfig
         configure(inner);
         foreach (var (sink, sinkLevel) in inner.Build())
             _sinks.Add((BackgroundSink.Create(sink, capacity), sinkLevel > minLevel ? sinkLevel : minLevel));
+        return _parent;
+    }
+}
+
+/// <summary>
+/// Configures field filters that skip matching fields entirely — filtered fields never
+/// reach redactors or sinks.
+/// </summary>
+public sealed class FilterConfig
+{
+    private readonly LoggerConfig _parent;
+    private readonly List<ILogFieldFilter> _filters = [];
+
+    internal FilterConfig(LoggerConfig parent) => _parent = parent;
+
+    internal (HashSet<string>? Names, ILogFieldFilter[]? Custom) Build()
+    {
+        if (_filters.Count == 0) return (null, null);
+
+        HashSet<string>? names = null;
+        List<ILogFieldFilter>? custom = null;
+
+        foreach (var filter in _filters)
+        {
+            if (filter is Filters.FieldNameFilter nf)
+            {
+                names ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var key in nf.Keys) names.Add(key);
+            }
+            else
+            {
+                custom ??= [];
+                custom.Add(filter);
+            }
+        }
+
+        return (names, custom?.Count > 0 ? [.. custom] : null);
+    }
+
+    /// <summary>Registers a custom <see cref="ILogFieldFilter"/>. Must be thread-safe.</summary>
+    /// <param name="filter">The filter instance.</param>
+    public LoggerConfig With(ILogFieldFilter filter)
+    {
+        _filters.Add(filter);
+        return _parent;
+    }
+
+    /// <summary>
+    /// Filters fields whose key matches any of the specified names (case-insensitive).
+    /// Matching fields are skipped during collection and never reach redactors or sinks.
+    /// </summary>
+    /// <param name="keys">Field names to filter.</param>
+    public LoggerConfig Fields(params string[] keys)
+    {
+        _filters.Add(new Filters.FieldNameFilter(keys));
+        return _parent;
+    }
+
+    /// <summary>
+    /// Filters fields whose key matches the given regex pattern.
+    /// </summary>
+    /// <param name="pattern">A regular expression pattern to match against field keys.</param>
+    public LoggerConfig Pattern(string pattern)
+    {
+        _filters.Add(new Filters.FieldPatternFilter(pattern));
+        return _parent;
+    }
+
+    /// <inheritdoc cref="Pattern(string)"/>
+    public LoggerConfig Pattern(Regex pattern)
+    {
+        _filters.Add(new Filters.FieldPatternFilter(pattern));
         return _parent;
     }
 }
