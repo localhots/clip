@@ -8,6 +8,17 @@
         <RepositoryUrl>https://github.com/localhots/clip</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <Copyright>Copyright (c) 2026 Gregory Eremin</Copyright>
+        <PackageReleaseNotes>https://github.com/localhots/clip/releases/tag/v$(Version)</PackageReleaseNotes>
+
+        <!-- SourceLink: enables step-into debugging for consumers -->
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    </ItemGroup>
 
 </Project>
