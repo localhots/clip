@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using Clip.OpenTelemetry.Export;
 using Google.Protobuf;
 using OpenTelemetry.Proto.Collector.Logs.V1;
@@ -357,6 +358,60 @@ public class OtlpSinkIntegrationTests
             a => a.Key == "telemetry.sdk.language" && a.Value.StringValue == "dotnet");
         Assert.Contains(resource.Attributes,
             a => a.Key == "telemetry.sdk.version" && a.Value.StringValue.Length > 0);
+    }
+
+    [Fact]
+    public async Task ResourceAttributes_AppearInExport()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+            ResourceAttributes = new Dictionary<string, string> { ["env"] = "prod" },
+        };
+
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "hello",
+                ReadOnlySpan<Field>.Empty, null);
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var resource = exporter.Requests[0].ResourceLogs[0].Resource;
+        Assert.Contains(resource.Attributes,
+            a => a.Key == "env" && a.Value.StringValue == "prod");
+    }
+
+    [Fact]
+    public async Task ResourceAttributes_OverrideSdkDefaults()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+            ResourceAttributes = new Dictionary<string, string>
+            {
+                ["telemetry.sdk.name"] = "custom",
+            },
+        };
+
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "hello",
+                ReadOnlySpan<Field>.Empty, null);
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var resource = exporter.Requests[0].ResourceLogs[0].Resource;
+        var sdkNameAttrs = resource.Attributes
+            .Where(a => a.Key == "telemetry.sdk.name")
+            .ToList();
+        Assert.Single(sdkNameAttrs);
+        Assert.Equal("custom", sdkNameAttrs[0].Value.StringValue);
     }
 
     [Fact]

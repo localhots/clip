@@ -82,34 +82,38 @@ public sealed class OtlpSink : ILogSink
                 Key = "service.version",
                 Value = new AnyValue { StringValue = version },
             });
+        var sdkVersion = typeof(OtlpSink).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+        if (!options.ResourceAttributes.ContainsKey("telemetry.sdk.name"))
+            resource.Attributes.Add(new KeyValue
+            {
+                Key = "telemetry.sdk.name",
+                Value = new AnyValue { StringValue = "Clip" },
+            });
+        if (!options.ResourceAttributes.ContainsKey("telemetry.sdk.language"))
+            resource.Attributes.Add(new KeyValue
+            {
+                Key = "telemetry.sdk.language",
+                Value = new AnyValue { StringValue = "dotnet" },
+            });
+        if (!options.ResourceAttributes.ContainsKey("telemetry.sdk.version"))
+            resource.Attributes.Add(new KeyValue
+            {
+                Key = "telemetry.sdk.version",
+                Value = new AnyValue { StringValue = sdkVersion },
+            });
         foreach (var (key, value) in options.ResourceAttributes)
             resource.Attributes.Add(new KeyValue
             {
                 Key = key,
                 Value = new AnyValue { StringValue = value },
             });
-        resource.Attributes.Add(new KeyValue
-        {
-            Key = "telemetry.sdk.name",
-            Value = new AnyValue { StringValue = "Clip" },
-        });
-        resource.Attributes.Add(new KeyValue
-        {
-            Key = "telemetry.sdk.language",
-            Value = new AnyValue { StringValue = "dotnet" },
-        });
-        resource.Attributes.Add(new KeyValue
-        {
-            Key = "telemetry.sdk.version",
-            Value = new AnyValue { StringValue = typeof(OtlpSink).Assembly.GetName().Version?.ToString() ?? "0.0.0" },
-        });
 
         _scopeLogs = new ScopeLogs
         {
             Scope = new InstrumentationScope
             {
                 Name = "Clip",
-                Version = typeof(OtlpSink).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+                Version = sdkVersion,
             },
         };
 
@@ -224,6 +228,9 @@ public sealed class OtlpSink : ILogSink
     {
         _scopeLogs.LogRecords.Clear();
 
+        var traceBytes = new byte[16];
+        var spanBytes = new byte[8];
+
         foreach (var entry in batch)
         {
             var (severityNumber, severityText) = FieldMapper.ToSeverity(entry.Level);
@@ -239,14 +246,12 @@ public sealed class OtlpSink : ILogSink
 
             if (entry.TraceId != default)
             {
-                var traceBytes = new byte[16];
                 entry.TraceId.CopyTo(traceBytes);
                 record.TraceId = ByteString.CopyFrom(traceBytes);
             }
 
             if (entry.SpanId != default)
             {
-                var spanBytes = new byte[8];
                 entry.SpanId.CopyTo(spanBytes);
                 record.SpanId = ByteString.CopyFrom(spanBytes);
             }
@@ -264,7 +269,7 @@ public sealed class OtlpSink : ILogSink
             _scopeLogs.LogRecords.Add(record);
         }
 
-        for (var attempt = 0;; attempt++)
+        for (var attempt = 0; ; attempt++)
             try
             {
                 var response = await _exporter.ExportAsync(_request, ct);

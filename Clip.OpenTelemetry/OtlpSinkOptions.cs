@@ -63,14 +63,15 @@ public sealed class OtlpSinkOptions
             {
                 "grpc" => OtlpProtocol.Grpc,
                 "http/protobuf" => OtlpProtocol.HttpProtobuf,
-                _ => Protocol,
+                _ => throw new NotSupportedException(
+                    $"Unsupported OTLP protocol: '{proto}'. Supported values: 'grpc', 'http/protobuf'."),
             };
 
-        if (Env("OTEL_EXPORTER_OTLP_HEADERS") is { } hdrs && Headers.Count == 0)
-            ParseKeyValuePairs(hdrs, Headers);
+        if (Env("OTEL_EXPORTER_OTLP_HEADERS") is { } headers && Headers.Count == 0)
+            ParseKeyValuePairs(headers, Headers);
 
-        if (Env("OTEL_SERVICE_NAME") is { } svc && ServiceName == "unknown_service")
-            ServiceName = svc;
+        if (Env("OTEL_SERVICE_NAME") is { } serviceName && ServiceName == "unknown_service")
+            ServiceName = serviceName;
 
         if (Env("OTEL_RESOURCE_ATTRIBUTES") is { } resAttrs && ResourceAttributes.Count == 0)
             ParseKeyValuePairs(resAttrs, ResourceAttributes);
