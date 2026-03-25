@@ -761,16 +761,46 @@ EXCLUDES = {
 # Each feature maps to a short label shown in the column header.
 # Each logger maps to a dict of feature -> value.
 # Values: True / False / str (short note shown in the cell).
-FEATURE_LABELS = [
-    ("structured", "Structured Fields"),
-    ("typed_fields", "Typed Fields"),
-    ("zero_alloc", "Zero-Alloc API"),
-    ("scoped_ctx", "Scoped Context"),
-    ("console", "Console Sink"),
-    ("json", "JSON Sink"),
-    ("async", "Async / Background"),
-    ("msg_templates", "Message Templates"),
-    ("src_gen", "Source Generator"),
+FEATURE_TABLES = [
+    (
+        "API & Data Model",
+        [
+            ("structured", "Structured Fields"),
+            ("typed_fields", "Typed Fields"),
+            ("zero_alloc", "Zero-Alloc API"),
+            ("msg_templates", "Message Templates"),
+            ("src_gen", "Source Generator"),
+        ],
+    ),
+    (
+        "Pipeline",
+        [
+            ("enrichers", "Enrichers"),
+            ("level_gated_enrichers", "Level-Gated Enrichers"),
+            ("filters", "Filters"),
+            ("redactors", "Redactors"),
+            ("scoped_ctx", "Scoped Context"),
+        ],
+    ),
+    (
+        "Output",
+        [
+            ("console", "Console Sink"),
+            ("json", "JSON Sink"),
+            ("file", "File Sink"),
+            ("otlp", "OpenTelemetry / OTLP"),
+        ],
+    ),
+    (
+        "Architecture",
+        [
+            ("sync_default", "Sync-by-Default"),
+            ("async", "Async / Background"),
+            ("buffer_pooling", "Buffer Pooling"),
+            ("zero_deps", "Zero Dependencies"),
+            ("mel_adapter", "MEL Adapter"),
+        ],
+    ),
 ]
 
 FEATURES = {
@@ -778,78 +808,148 @@ FEATURES = {
         "structured": True,
         "typed_fields": True,
         "zero_alloc": True,
+        "msg_templates": False,
+        "src_gen": False,
+        "enrichers": True,
+        "level_gated_enrichers": True,
+        "filters": True,
+        "redactors": True,
         "scoped_ctx": True,
         "console": True,
         "json": True,
+        "file": True,
+        "otlp": True,
+        "sync_default": True,
         "async": True,
-        "msg_templates": False,
-        "src_gen": False,
+        "buffer_pooling": True,
+        "zero_deps": True,
+        "mel_adapter": True,
     },
     "Serilog": {
         "structured": True,
         "typed_fields": False,
         "zero_alloc": False,
+        "msg_templates": True,
+        "src_gen": False,
+        "enrichers": True,
+        "level_gated_enrichers": False,
+        "filters": True,
+        "redactors": False,
         "scoped_ctx": True,
         "console": True,
         "json": True,
+        "file": True,
+        "otlp": True,
+        "sync_default": False,
         "async": True,
-        "msg_templates": True,
-        "src_gen": False,
+        "buffer_pooling": False,
+        "zero_deps": False,
+        "mel_adapter": True,
     },
     "NLog": {
         "structured": True,
         "typed_fields": False,
         "zero_alloc": False,
+        "msg_templates": True,
+        "src_gen": False,
+        "enrichers": True,
+        "level_gated_enrichers": False,
+        "filters": True,
+        "redactors": False,
         "scoped_ctx": True,
         "console": True,
         "json": True,
+        "file": True,
+        "otlp": True,
+        "sync_default": False,
         "async": True,
-        "msg_templates": True,
-        "src_gen": False,
+        "buffer_pooling": False,
+        "zero_deps": False,
+        "mel_adapter": True,
     },
     "MEL": {
         "structured": True,
         "typed_fields": False,
         "zero_alloc": False,
+        "msg_templates": True,
+        "src_gen": True,
+        "enrichers": False,
+        "level_gated_enrichers": False,
+        "filters": True,
+        "redactors": False,
         "scoped_ctx": True,
         "console": True,
         "json": True,
+        "file": False,
+        "otlp": True,
+        "sync_default": False,
         "async": True,
-        "msg_templates": True,
-        "src_gen": True,
+        "buffer_pooling": False,
+        "zero_deps": False,
+        "mel_adapter": False,
     },
     "ZLogger": {
         "structured": True,
         "typed_fields": False,
         "zero_alloc": True,
+        "msg_templates": True,
+        "src_gen": True,
+        "enrichers": False,
+        "level_gated_enrichers": False,
+        "filters": True,
+        "redactors": False,
         "scoped_ctx": True,
         "console": True,
         "json": True,
+        "file": True,
+        "otlp": False,
+        "sync_default": False,
         "async": True,
-        "msg_templates": True,
-        "src_gen": True,
+        "buffer_pooling": True,
+        "zero_deps": False,
+        "mel_adapter": False,
     },
     "Log4Net": {
         "structured": False,
         "typed_fields": False,
         "zero_alloc": False,
+        "msg_templates": False,
+        "src_gen": False,
+        "enrichers": True,
+        "level_gated_enrichers": False,
+        "filters": True,
+        "redactors": False,
         "scoped_ctx": False,
         "console": True,
         "json": False,
+        "file": True,
+        "otlp": False,
+        "sync_default": True,
         "async": True,
-        "msg_templates": False,
-        "src_gen": False,
+        "buffer_pooling": False,
+        "zero_deps": False,
+        "mel_adapter": True,
     },
     "ZeroLog": {
         "structured": True,
         "typed_fields": True,
         "zero_alloc": True,
+        "msg_templates": False,
+        "src_gen": False,
+        "enrichers": False,
+        "level_gated_enrichers": False,
+        "filters": False,
+        "redactors": False,
         "scoped_ctx": False,
         "console": True,
         "json": False,
+        "file": False,
+        "otlp": False,
+        "sync_default": True,
         "async": True,
-        "msg_templates": False,
-        "src_gen": False,
+        "buffer_pooling": True,
+        "zero_deps": False,
+        "mel_adapter": False,
     },
 }
 
@@ -865,7 +965,7 @@ _FEATURE_LOGGER_ORDER = [
 
 
 def render_feature_matrix():
-    """Render the feature matrix as a markdown table.
+    """Render the feature matrix as grouped markdown tables.
 
     Returns a list of strings (one per line).
     """
@@ -873,22 +973,24 @@ def render_feature_matrix():
 
     lines = ["", "## Feature Matrix", ""]
 
-    # Header row
-    header = "| Feature | " + " | ".join(loggers) + " |"
-    sep = "|---------|" + "|".join(":---:" for _ in loggers) + "|"
-    lines += [header, sep]
+    for group_title, labels in FEATURE_TABLES:
+        header = "| " + group_title + " | " + " | ".join(loggers) + " |"
+        sep = "|---------|" + "|".join(":---:" for _ in loggers) + "|"
+        lines += [header, sep]
 
-    for key, label in FEATURE_LABELS:
-        cells = []
-        for logger in loggers:
-            val = FEATURES.get(logger, {}).get(key, False)
-            if val is True:
-                cells.append("\u2705")
-            elif val is False:
-                cells.append("\u2014")
-            else:
-                cells.append(str(val))
-        lines.append(f"| {label} | " + " | ".join(cells) + " |")
+        for key, label in labels:
+            cells = []
+            for logger in loggers:
+                val = FEATURES.get(logger, {}).get(key, False)
+                if val is True:
+                    cells.append("\u2705")
+                elif val is False:
+                    cells.append("\u2014")
+                else:
+                    cells.append(str(val))
+            lines.append(f"| {label} | " + " | ".join(cells) + " |")
+
+        lines.append("")
 
     return lines
 
