@@ -1,8 +1,10 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Threading.Channels;
 using Clip.OpenTelemetry.Export;
 using Clip.OpenTelemetry.Mapping;
 using Clip.Sinks;
+using Google.Protobuf;
 using OpenTelemetry.Proto.Collector.Logs.V1;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Logs.V1;
@@ -86,6 +88,21 @@ public sealed class OtlpSink : ILogSink
                 Key = key,
                 Value = new AnyValue { StringValue = value },
             });
+        resource.Attributes.Add(new KeyValue
+        {
+            Key = "telemetry.sdk.name",
+            Value = new AnyValue { StringValue = "Clip" },
+        });
+        resource.Attributes.Add(new KeyValue
+        {
+            Key = "telemetry.sdk.language",
+            Value = new AnyValue { StringValue = "dotnet" },
+        });
+        resource.Attributes.Add(new KeyValue
+        {
+            Key = "telemetry.sdk.version",
+            Value = new AnyValue { StringValue = typeof(OtlpSink).Assembly.GetName().Version?.ToString() ?? "0.0.0" },
+        });
 
         _scopeLogs = new ScopeLogs
         {
@@ -124,7 +141,12 @@ public sealed class OtlpSink : ILogSink
             fields.CopyTo(fieldArray);
         }
 
-        var entry = new LogEntry(timestamp, level, message, fieldArray, fieldCount, exception);
+        var activity = Activity.Current;
+        var entry = new LogEntry(
+            timestamp, level, message, fieldArray, fieldCount, exception,
+            activity?.TraceId ?? default,
+            activity?.SpanId ?? default,
+            activity?.ActivityTraceFlags ?? default);
         if (!_channel.Writer.TryWrite(entry) && fieldCount > 0)
             ArrayPool<Field>.Shared.Return(fieldArray, true);
     }
@@ -215,6 +237,23 @@ public sealed class OtlpSink : ILogSink
                 Body = new AnyValue { StringValue = entry.Message },
             };
 
+            if (entry.TraceId != default)
+            {
+                var traceBytes = new byte[16];
+                entry.TraceId.CopyTo(traceBytes);
+                record.TraceId = ByteString.CopyFrom(traceBytes);
+            }
+
+            if (entry.SpanId != default)
+            {
+                var spanBytes = new byte[8];
+                entry.SpanId.CopyTo(spanBytes);
+                record.SpanId = ByteString.CopyFrom(spanBytes);
+            }
+
+            if (entry.TraceFlags != ActivityTraceFlags.None)
+                record.Flags = (uint)entry.TraceFlags;
+
             var fields = entry.Fields.AsSpan(0, entry.FieldCount);
             foreach (ref readonly var field in fields)
                 record.Attributes.Add(FieldMapper.ToKeyValue(in field));
@@ -225,7 +264,7 @@ public sealed class OtlpSink : ILogSink
             _scopeLogs.LogRecords.Add(record);
         }
 
-        for (var attempt = 0; ; attempt++)
+        for (var attempt = 0;; attempt++)
             try
             {
                 var response = await _exporter.ExportAsync(_request, ct);
@@ -300,5 +339,8 @@ public sealed class OtlpSink : ILogSink
         string Message,
         Field[] Fields,
         int FieldCount,
-        Exception? Exception);
+        Exception? Exception,
+        ActivityTraceId TraceId,
+        ActivitySpanId SpanId,
+        ActivityTraceFlags TraceFlags);
 }
