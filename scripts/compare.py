@@ -27,6 +27,7 @@ from benchdb_reader import load_db, load_class_rows, get_environment
 
 DB_PATH = Path("tmp/benchdb.json")
 OUTPUT_FILE = Path("docs/COMPARE.md")
+CHARTS_DIR = Path("tmp/charts")
 
 CATEGORY_TITLES = {
   "NoFields": "No Fields",
@@ -88,9 +89,6 @@ def emit_filtered(rows: list[dict[str, str]]) -> list[str]:
   return out
 
 
-CHARTS_DIR = Path("tmp/charts")
-
-
 def _chart_ref(cat: str) -> list[str]:
   """Return markdown image reference if chart exists."""
   chart = CHARTS_DIR / f"{cat}.svg"
@@ -143,8 +141,8 @@ def emit_comparison(rows: list[dict[str, str]], section: str, desc: str) -> list
       pending = []
       excludes = get_excludes(cat)
       title = f"{section}: {category_title(cat)}"
-      sub_desc = get_description(cat.rsplit("_", 1)[-1] if "_" in cat else cat)
       sub_key = cat.rsplit("_", 1)[-1] if "_" in cat else cat
+      sub_desc = get_description(sub_key)
       sub_code = get_code_example(sub_key)
       out += ["", f"### {title}", ""]
       if sub_desc:

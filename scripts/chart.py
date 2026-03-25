@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from metadata import get_excludes, strip_prefix, parse_mean_ns, LOGGER_ORDER
 
+from benchdb import BENCH_CLASSES
 from benchdb_reader import load_db, load_class_rows
 
 DB_PATH = Path("tmp/benchdb.json")
@@ -202,7 +203,7 @@ def main():
     old.unlink()
 
   print("Generating comparison charts...")
-  for bench in ("FilteredBenchmarks", "ConsoleBenchmarks", "JsonBenchmarks"):
+  for bench in BENCH_CLASSES:
     process_class(bench, db)
 
   print("Done.")

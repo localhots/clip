@@ -21,7 +21,7 @@ ARTIFACTS_DIR = Path("tmp/BenchmarkDotNet.Artifacts/results")
 
 BENCH_CLASSES = ("FilteredBenchmarks", "ConsoleBenchmarks", "JsonBenchmarks")
 
-# Columns to extract from BDN CSV per benchmark class.
+# Columns to extract from BDN CSV files.
 FIELDS = {
   "Method",
   "Categories",
@@ -34,6 +34,18 @@ FIELDS = {
   "Gen1",
   "Gen2",
   "Allocated",
+}
+
+_CSV_TO_DB = {
+  "Categories": "categories",
+  "Mean": "mean",
+  "Error": "error",
+  "StdDev": "stddev",
+  "Median": "median",
+  "Gen0": "gen0",
+  "Gen1": "gen1",
+  "Gen2": "gen2",
+  "Allocated": "allocated",
 }
 
 
@@ -100,11 +112,13 @@ def import_cmd(artifacts_dir: Path, db_path: Path, logger_filter: list[str] | No
     print(f"Artifacts directory not found: {artifacts_dir}", file=sys.stderr)
     sys.exit(1)
 
-  # Load existing DB
   db: dict = {"environment": {}, "results": {}}
   if db_path.exists():
-    with open(db_path) as f:
-      db = json.load(f)
+    try:
+      with open(db_path) as f:
+        db = json.load(f)
+    except (json.JSONDecodeError, ValueError) as e:
+      print(f"Warning: existing database is corrupt ({e}), starting fresh.", file=sys.stderr)
 
   sha = _git_sha()
   ts = datetime.now().isoformat(timespec="seconds")
@@ -113,6 +127,7 @@ def import_cmd(artifacts_dir: Path, db_path: Path, logger_filter: list[str] | No
   for class_name in BENCH_CLASSES:
     csv_file = artifacts_dir / f"Clip.Benchmarks.{class_name}-report.csv"
     if not csv_file.exists():
+      print(f"  {class_name}: skipped (no CSV found)", file=sys.stderr)
       continue
 
     md_file = artifacts_dir / f"Clip.Benchmarks.{class_name}-report-github.md"
@@ -120,6 +135,8 @@ def import_cmd(artifacts_dir: Path, db_path: Path, logger_filter: list[str] | No
       header = _parse_env_header(md_file)
       if header:
         db["environment"]["raw_header"] = header
+      else:
+        print(f"  Warning: could not parse environment header from {md_file.name}", file=sys.stderr)
 
     rows = _parse_csv(csv_file)
     if not rows:
@@ -131,7 +148,6 @@ def import_cmd(artifacts_dir: Path, db_path: Path, logger_filter: list[str] | No
     for row in rows:
       method = row.pop("Method")
 
-      # Apply logger filter if set
       if logger_filter:
         logger = method.rsplit("_", 1)[-1] if "_" in method else method
         if logger not in logger_filter:
@@ -140,31 +156,19 @@ def import_cmd(artifacts_dir: Path, db_path: Path, logger_filter: list[str] | No
       ratio = row.pop("Ratio", "")
       baseline = _is_baseline(method, ratio)
 
+      if "Mean" not in row:
+        print(f"  Warning: {method} has no Mean value, skipping", file=sys.stderr)
+        continue
+
       entry: dict = {
         "baseline": baseline,
         "timestamp": ts,
         "git_sha": sha,
       }
 
-      # Map CSV fields to DB fields
-      if "Categories" in row:
-        entry["categories"] = row["Categories"]
-      if "Mean" in row:
-        entry["mean"] = row["Mean"]
-      if "Error" in row:
-        entry["error"] = row["Error"]
-      if "StdDev" in row:
-        entry["stddev"] = row["StdDev"]
-      if "Median" in row:
-        entry["median"] = row["Median"]
-      if "Gen0" in row:
-        entry["gen0"] = row["Gen0"]
-      if "Gen1" in row:
-        entry["gen1"] = row["Gen1"]
-      if "Gen2" in row:
-        entry["gen2"] = row["Gen2"]
-      if "Allocated" in row:
-        entry["allocated"] = row["Allocated"]
+      for csv_key, db_key in _CSV_TO_DB.items():
+        if csv_key in row:
+          entry[db_key] = row[csv_key]
 
       class_data[method] = entry
       imported += 1
@@ -172,12 +176,21 @@ def import_cmd(artifacts_dir: Path, db_path: Path, logger_filter: list[str] | No
 
     print(f"  {class_name}: {class_imported} methods")
 
+  if imported == 0:
+    print(
+      "Error: no results were imported. Check that CSV files exist in the artifacts directory.",
+      file=sys.stderr,
+    )
+    sys.exit(1)
+
   # Write atomically
   db_path.parent.mkdir(parents=True, exist_ok=True)
   tmp_path = db_path.with_suffix(".tmp")
   with open(tmp_path, "w") as f:
     json.dump(db, f, indent=2)
     f.write("\n")
+    f.flush()
+    os.fsync(f.fileno())
   os.replace(tmp_path, db_path)
 
   print(f"Imported {imported} results into {db_path}")

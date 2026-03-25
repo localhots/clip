@@ -1052,19 +1052,7 @@ def get_caveats(category):
   return result
 
 
-_CAVEAT_LOGGER_ORDER = [
-  "Clip",
-  "ClipZero",
-  "ClipMEL",
-  "MEL",
-  "MELSrcGen",
-  "Serilog",
-  "ZLogger",
-  "NLog",
-  "Log4Net",
-  "ZeroLog",
-]
-_CAVEAT_RANK = {name: i for i, name in enumerate(_CAVEAT_LOGGER_ORDER)}
+_CAVEAT_RANK = {name: i for i, name in enumerate(LOGGER_ORDER)}
 
 
 def render_caveats(category):

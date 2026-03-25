@@ -20,8 +20,13 @@ def load_db(path: Path = DEFAULT_DB_PATH) -> dict:
     print(f"Benchmark database not found: {path}", file=sys.stderr)
     print("Run 'make bench' or 'scripts/benchdb.py import' first.", file=sys.stderr)
     sys.exit(1)
-  with open(path) as f:
-    return json.load(f)
+  try:
+    with open(path) as f:
+      return json.load(f)
+  except json.JSONDecodeError as e:
+    print(f"Benchmark database is corrupt: {path} ({e})", file=sys.stderr)
+    print("Delete the file and re-import with 'make bench-update'.", file=sys.stderr)
+    sys.exit(1)
 
 
 def get_environment(db: dict) -> list[str]:
@@ -41,7 +46,9 @@ def _compute_ratios(methods: dict) -> dict[str, str]:
   """Compute ratio strings for all methods within one category.
 
   Returns a dict mapping method name -> ratio string (e.g., "3.77").
-  The baseline method gets "1.00". If baseline mean is 0, all get "?".
+  The baseline method gets "1.00". Returns "?" for all methods if no
+  baseline is found, the baseline mean cannot be parsed, or the
+  baseline mean is 0.
   """
   # Find baseline
   baseline_name = None
@@ -84,6 +91,15 @@ def load_class_rows(class_name: str, db: dict) -> list[dict[str, str]]:
   class_data = db.get("results", {}).get(class_name, {})
   if not class_data:
     return []
+
+  # Warn if data comes from multiple runs (ratios may be inaccurate)
+  timestamps = {data.get("timestamp", "") for data in class_data.values()}
+  if len(timestamps) > 1:
+    print(
+      f"Warning: {class_name} contains data from {len(timestamps)} different runs. "
+      f"Ratios may be inaccurate. Run a full benchmark to get consistent data.",
+      file=sys.stderr,
+    )
 
   # Group by category for ratio computation
   by_cat: dict[str, dict[str, dict]] = {}

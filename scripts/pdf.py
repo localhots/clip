@@ -8,6 +8,7 @@ Requires: uv sync
     brew install pango  (macOS system dependency for weasyprint)
 """
 
+import html as html_mod
 import re
 from pathlib import Path
 
@@ -150,7 +151,7 @@ def _highlight_match(m):
   """Replace a <pre><code class="language-x"> block with Pygments HTML."""
   lang = m.group(1)
   code = m.group(2)
-  code = code.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&quot;", '"')
+  code = html_mod.unescape(code)
   try:
     lexer = get_lexer_by_name(lang)
   except Exception:
@@ -161,7 +162,7 @@ def _highlight_match(m):
 def _highlight_bare(m):
   """Replace a bare <pre><code> block — guess the language."""
   code = m.group(1)
-  code = code.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&quot;", '"')
+  code = html_mod.unescape(code)
   try:
     lexer = guess_lexer(code)
   except Exception:
