@@ -55,32 +55,45 @@ public sealed class OtlpSinkOptions
     /// </summary>
     internal OtlpSinkOptions ApplyEnvironment()
     {
-        if (Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") is { Length: > 0 } ep
-            && Endpoint == "http://localhost:4317")
+        if (Env("OTEL_EXPORTER_OTLP_ENDPOINT") is { } ep && Endpoint == "http://localhost:4317")
             Endpoint = ep;
 
-        if (Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL") is { Length: > 0 } proto
-            && Protocol == OtlpProtocol.Grpc)
+        if (Env("OTEL_EXPORTER_OTLP_PROTOCOL") is { } proto && Protocol == OtlpProtocol.Grpc)
             Protocol = proto switch
             {
                 "grpc" => OtlpProtocol.Grpc,
                 "http/protobuf" => OtlpProtocol.HttpProtobuf,
-                _ => Protocol,
+                _ => throw new NotSupportedException(
+                    $"Unsupported OTLP protocol: '{proto}'. Supported values: 'grpc', 'http/protobuf'."),
             };
 
-        if (Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS") is { Length: > 0 } hdrs
-            && Headers.Count == 0)
-            foreach (var pair in hdrs.Split(',', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var eqIdx = pair.IndexOf('=');
-                if (eqIdx > 0)
-                    Headers[pair[..eqIdx].Trim()] = pair[(eqIdx + 1)..].Trim();
-            }
+        if (Env("OTEL_EXPORTER_OTLP_HEADERS") is { } headers && Headers.Count == 0)
+            ParseKeyValuePairs(headers, Headers);
 
-        if (Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") is { Length: > 0 } svc
-            && ServiceName == "unknown_service")
-            ServiceName = svc;
+        if (Env("OTEL_SERVICE_NAME") is { } serviceName && ServiceName == "unknown_service")
+            ServiceName = serviceName;
+
+        if (Env("OTEL_RESOURCE_ATTRIBUTES") is { } resAttrs && ResourceAttributes.Count == 0)
+            ParseKeyValuePairs(resAttrs, ResourceAttributes);
 
         return this;
+    }
+
+    private static string? Env(string name)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        return value is { Length: > 0 }
+            ? value
+            : null;
+    }
+
+    private static void ParseKeyValuePairs(string input, Dictionary<string, string> target)
+    {
+        foreach (var pair in input.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eqIdx = pair.IndexOf('=');
+            if (eqIdx > 0)
+                target[pair[..eqIdx].Trim()] = pair[(eqIdx + 1)..].Trim();
+        }
     }
 }

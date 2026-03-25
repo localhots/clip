@@ -6,6 +6,7 @@ obj/
 # Python
 __pycache__
 *.pyc
+uv.lock
 .venv/
 
 # Temporary / artifacts

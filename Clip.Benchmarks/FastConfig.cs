@@ -9,51 +9,70 @@ using Perfolizer.Horology;
 namespace Clip.Benchmarks;
 
 //
-// Modes (env vars):
-//   BENCH_MODE=fast (default) — InProcess, 1 warmup, 3 × 100 ms iterations (~5 min)
-//   BENCH_MODE=full — InProcess, 2 warmups, 5 × 250 ms iterations (~10-15 min)
-//   BENCH_CONFIG=asm — out-of-process + DisassemblyDiagnoser, artifacts in tmp/BenchmarkDotNet.AsmArtifacts/
+// BENCH_MODE env var:
+//   fast (default) — InProcess, 2 warmups, 5 × 200 ms iterations
+//   full — out-of-process, 3 warmups, 50 × 1000 ms iterations
+//   asm — out-of-process + DisassemblyDiagnoser, artifacts in tmp/BenchmarkDotNet.AsmArtifacts/
 //
 
 internal sealed class FastConfig : ManualConfig
 {
     public FastConfig()
     {
-        var asm = string.Equals(
-            Environment.GetEnvironmentVariable("BENCH_CONFIG"),
-            "asm", StringComparison.OrdinalIgnoreCase);
+        var mode = (Environment.GetEnvironmentVariable("BENCH_MODE") ?? "fast")
+            .ToLowerInvariant();
 
-        ArtifactsPath = Path.Combine("tmp", asm
+        ArtifactsPath = Path.Combine("tmp", mode == "asm"
             ? "BenchmarkDotNet.AsmArtifacts"
             : "BenchmarkDotNet.Artifacts");
 
-        if (asm)
+        switch (mode)
         {
-            AddJob(Job.Default.WithWarmupCount(1).WithIterationCount(2));
-            AddDiagnoser(new DisassemblyDiagnoser(new DisassemblyDiagnoserConfig(3)));
-        }
-        else
-        {
-            var full = string.Equals(
-                Environment.GetEnvironmentVariable("BENCH_MODE"),
-                "full", StringComparison.OrdinalIgnoreCase);
-
-            AddJob(Job.Default
-                .WithToolchain(InProcessEmitToolchain.Instance)
-                .WithWarmupCount(full
-                    ? 2
-                    : 1)
-                .WithIterationCount(full
-                    ? 5
-                    : 3)
-                .WithIterationTime(TimeInterval.FromMilliseconds(full
-                    ? 250
-                    : 100)));
+            case "asm": ConfigureAsm(); break;
+            case "full": ConfigureFull(); break;
+            default: ConfigureFast(); break;
         }
 
         AddExporter(MarkdownExporter.GitHub);
         AddDiagnoser(MemoryDiagnoser.Default);
         AddColumn(CategoriesColumn.Default);
         AddLogicalGroupRules(BenchmarkLogicalGroupRule.ByCategory);
+    }
+
+    //
+    // Fast — quick iteration during development
+    //
+
+    private void ConfigureFast()
+    {
+        AddJob(Job.Default
+            .WithToolchain(InProcessEmitToolchain.Instance)
+            .WithWarmupCount(2)
+            .WithIterationCount(5)
+            .WithIterationTime(TimeInterval.FromMilliseconds(200)));
+    }
+
+    //
+    // Full — publication-quality, out-of-process
+    //
+
+    private void ConfigureFull()
+    {
+        AddJob(Job.Default
+            .WithWarmupCount(3)
+            .WithIterationCount(50)
+            .WithIterationTime(TimeInterval.FromMilliseconds(1000)));
+    }
+
+    //
+    // Asm — JIT disassembly
+    //
+
+    private void ConfigureAsm()
+    {
+        AddJob(Job.Default
+            .WithWarmupCount(1)
+            .WithIterationCount(2));
+        AddDiagnoser(new DisassemblyDiagnoser(new DisassemblyDiagnoserConfig(3)));
     }
 }

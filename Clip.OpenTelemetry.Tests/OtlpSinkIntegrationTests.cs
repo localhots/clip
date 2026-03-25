@@ -1,4 +1,7 @@
+using System.Diagnostics;
+using System.Linq;
 using Clip.OpenTelemetry.Export;
+using Google.Protobuf;
 using OpenTelemetry.Proto.Collector.Logs.V1;
 using OpenTelemetry.Proto.Logs.V1;
 using OpenTelemetry.Proto.Resource.V1;
@@ -237,6 +240,195 @@ public class OtlpSinkIntegrationTests
 
         Assert.Equal(3, sink.RejectedRecords);
         Assert.Equal(0, sink.FailedExports);
+    }
+
+    [Fact]
+    public async Task TraceContext_CapturedFromActivity()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        using var activity = new Activity("test-operation");
+        activity.SetIdFormat(ActivityIdFormat.W3C);
+        activity.Start();
+
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "traced",
+                ReadOnlySpan<Field>.Empty, null);
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var record = exporter.Requests[0].ResourceLogs[0].ScopeLogs[0].LogRecords[0];
+
+        var expectedTraceBytes = new byte[16];
+        activity.TraceId.CopyTo(expectedTraceBytes);
+        Assert.Equal(ByteString.CopyFrom(expectedTraceBytes), record.TraceId);
+
+        var expectedSpanBytes = new byte[8];
+        activity.SpanId.CopyTo(expectedSpanBytes);
+        Assert.Equal(ByteString.CopyFrom(expectedSpanBytes), record.SpanId);
+    }
+
+    [Fact]
+    public async Task NoActivity_TraceFieldsEmpty()
+    {
+        Activity.Current = null;
+
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "untraced",
+                ReadOnlySpan<Field>.Empty, null);
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var record = exporter.Requests[0].ResourceLogs[0].ScopeLogs[0].LogRecords[0];
+
+        Assert.Equal(ByteString.Empty, record.TraceId);
+        Assert.Equal(ByteString.Empty, record.SpanId);
+        Assert.Equal(0u, record.Flags);
+    }
+
+    [Fact]
+    public async Task TraceFlags_Propagated()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        using var activity = new Activity("sampled-op");
+        activity.SetIdFormat(ActivityIdFormat.W3C);
+        activity.Start();
+        activity.ActivityTraceFlags = ActivityTraceFlags.Recorded;
+
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "sampled",
+                ReadOnlySpan<Field>.Empty, null);
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var record = exporter.Requests[0].ResourceLogs[0].ScopeLogs[0].LogRecords[0];
+        Assert.Equal((uint)ActivityTraceFlags.Recorded, record.Flags);
+    }
+
+    [Fact]
+    public async Task Resource_ContainsSdkAttributes()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "hello",
+                ReadOnlySpan<Field>.Empty, null);
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var resource = exporter.Requests[0].ResourceLogs[0].Resource;
+        Assert.Contains(resource.Attributes,
+            a => a.Key == "telemetry.sdk.name" && a.Value.StringValue == "Clip");
+        Assert.Contains(resource.Attributes,
+            a => a.Key == "telemetry.sdk.language" && a.Value.StringValue == "dotnet");
+        Assert.Contains(resource.Attributes,
+            a => a.Key == "telemetry.sdk.version" && a.Value.StringValue.Length > 0);
+    }
+
+    [Fact]
+    public async Task ResourceAttributes_AppearInExport()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+            ResourceAttributes = new Dictionary<string, string> { ["env"] = "prod" },
+        };
+
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "hello",
+                ReadOnlySpan<Field>.Empty, null);
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var resource = exporter.Requests[0].ResourceLogs[0].Resource;
+        Assert.Contains(resource.Attributes,
+            a => a.Key == "env" && a.Value.StringValue == "prod");
+    }
+
+    [Fact]
+    public async Task ResourceAttributes_OverrideSdkDefaults()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+            ResourceAttributes = new Dictionary<string, string>
+            {
+                ["telemetry.sdk.name"] = "custom",
+            },
+        };
+
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "hello",
+                ReadOnlySpan<Field>.Empty, null);
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var resource = exporter.Requests[0].ResourceLogs[0].Resource;
+        var sdkNameAttrs = resource.Attributes
+            .Where(a => a.Key == "telemetry.sdk.name")
+            .ToList();
+        Assert.Single(sdkNameAttrs);
+        Assert.Equal("custom", sdkNameAttrs[0].Value.StringValue);
+    }
+
+    [Fact]
+    public void OtelResourceAttributes_ParsedFromEnv()
+    {
+        var prev = Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES");
+        try
+        {
+            Environment.SetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES",
+                "cloud.provider=gcp,cloud.region=us-central1");
+
+            var options = new OtlpSinkOptions();
+            options.ApplyEnvironment();
+
+            Assert.Equal("gcp", options.ResourceAttributes["cloud.provider"]);
+            Assert.Equal("us-central1", options.ResourceAttributes["cloud.region"]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES", prev);
+        }
     }
 
     //
