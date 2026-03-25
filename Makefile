@@ -33,7 +33,7 @@ format-cs:
 
 ## Format Python scripts
 format-py:
-	.venv/bin/black scripts/
+	uv run ruff format scripts/
 
 ## Run fast benchmarks — all loggers (~40 min)
 bench:
@@ -61,7 +61,7 @@ bench-clip-full:
 
 ## Import results into DB and archive raw artifacts
 bench-update:
-	@.venv/bin/python3 scripts/benchdb.py import
+	@uv run python3 scripts/benchdb.py import
 	@$(MAKE) archive-bench
 
 ## Dump JIT assembly for Clip hot paths
@@ -82,20 +82,20 @@ archive-bench:
 
 ## Generate bar charts from benchmark database
 charts:
-	.venv/bin/python3 scripts/chart.py
+	uv run python3 scripts/chart.py
 
 ## Generate docs/COMPARE.md (depends on charts)
 docs: charts
-	.venv/bin/python3 scripts/compare.py
+	uv run python3 scripts/compare.py
 
 ## Generate PDFs from docs
 pdf: docs
-	.venv/bin/python3 scripts/pdf.py
+	uv run python3 scripts/pdf.py
 
 ## Generate docs/USAGE.md (code + output for all loggers)
 usage:
 	dotnet run -c Release --project Clip.ComparisonDemo > tmp/raw/usage.txt
-	.venv/bin/python3 scripts/usage.py tmp/raw/usage.txt
+	uv run python3 scripts/usage.py tmp/raw/usage.txt
 
 ## Run the demo app (console output)
 demo: demo-console
@@ -119,10 +119,9 @@ pkg:
 	@echo ""
 	@ls -lh pkg/*.nupkg
 
-## Create venv and install Python dependencies
+## Install Python dependencies
 setup:
-	python3 -m venv .venv
-	.venv/bin/pip install -r scripts/requirements.txt
+	uv sync
 
 ## Remove build artifacts and benchmark results
 clean:

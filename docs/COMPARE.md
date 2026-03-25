@@ -2,7 +2,7 @@
 
 BenchmarkDotNet v0.15.8, macOS Tahoe 26.3.1 (25D2128) [Darwin 25.3.0]  
 Apple M5, 1 CPU, 10 logical and 10 physical cores  
-Run: 2026-03-25 02:45
+Run: 2026-03-25 02:50
 
 Clip is a zero-dependency structured logging library for .NET 9. It formats directly into pooled UTF-8 byte buffers — no intermediate strings, no allocations on the hot path, no background-thread tricks to hide latency.
 
