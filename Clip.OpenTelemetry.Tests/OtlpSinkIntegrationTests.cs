@@ -273,8 +273,6 @@ public class OtlpSinkIntegrationTests
         var expectedSpanBytes = new byte[8];
         activity.SpanId.CopyTo(expectedSpanBytes);
         Assert.Equal(ByteString.CopyFrom(expectedSpanBytes), record.SpanId);
-
-        activity.Stop();
     }
 
     [Fact]
@@ -329,8 +327,6 @@ public class OtlpSinkIntegrationTests
 
         var record = exporter.Requests[0].ResourceLogs[0].ScopeLogs[0].LogRecords[0];
         Assert.Equal((uint)ActivityTraceFlags.Recorded, record.Flags);
-
-        activity.Stop();
     }
 
     [Fact]
