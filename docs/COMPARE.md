@@ -2,7 +2,7 @@
 
 BenchmarkDotNet v0.15.8, macOS Tahoe 26.3.1 (25D2128) [Darwin 25.3.0]  
 Apple M5, 1 CPU, 10 logical and 10 physical cores  
-Run: 2026-03-25 03:34
+Run: 2026-03-25 23:00
 
 Clip is a zero-dependency structured logging library for .NET 9. It formats directly into pooled UTF-8 byte buffers — no intermediate strings, no allocations on the hot path, no background-thread tricks to hide latency.
 
@@ -83,7 +83,7 @@ logger.Debug("This is filtered out");
 |--------|-----:|----------:|
 | **Clip** | 0.0000 ns | - |
 | **ClipZero** | 0.0000 ns | - |
-| **ClipMEL** | 5.1255 ns | - |
+| **ClipMEL** | 5.3995 ns | - |
 | MEL | 5.2687 ns | - |
 | MELSrcGen | 0.6043 ns | - |
 | Serilog | 0.5558 ns | - |
@@ -158,16 +158,16 @@ logger.Info("Request handled");
 
 | Logger | Mean | vs Clip | Allocated |
 |--------|-----:|--------:|----------:|
-| **Clip** | 25.19 ns | 1.00 | - |
-| **ClipZero** | 25.48 ns | 1.01 | - |
-| **ClipMEL** | 56.68 ns | 2.25 | 64 B |
-| MEL | 397.58 ns | 15.78 | 352 B |
-| MELSrcGen | 469.05 ns | 18.62 | 368 B |
-| Serilog | 284.84 ns | 11.31 | 416 B |
-| ZLogger | 289.82 ns | 11.51 | - |
-| NLog | 160.99 ns | 6.39 | 304 B |
-| Log4Net | 188.63 ns | 7.49 | 392 B |
-| ZeroLog | 116.85 ns | 4.64 | - |
+| **Clip** | 25.73 ns | 1.00 | - |
+| **ClipZero** | 25.68 ns | 1.00 | - |
+| **ClipMEL** | 57.65 ns | 2.24 | 64 B |
+| MEL | 397.58 ns | 15.45 | 352 B |
+| MELSrcGen | 469.05 ns | 18.23 | 368 B |
+| Serilog | 284.84 ns | 11.07 | 416 B |
+| ZLogger | 289.82 ns | 11.26 | - |
+| NLog | 160.99 ns | 6.26 | 304 B |
+| Log4Net | 188.63 ns | 7.33 | 392 B |
+| ZeroLog | 116.85 ns | 4.54 | - |
 
 > **Clip:** Formats into a pooled byte buffer and writes UTF-8 directly — no intermediate strings. Timestamp is cached so repeated calls within the same millisecond skip reformatting.
 
@@ -221,16 +221,16 @@ logger.Info("Request handled", new {
 
 | Logger | Mean | vs Clip | Allocated |
 |--------|-----:|--------:|----------:|
-| **Clip** | 187.96 ns | 1.00 | 72 B |
-| **ClipZero** | 135.80 ns | 0.72 | - |
-| **ClipMEL** | 384.34 ns | 2.04 | 608 B |
-| MEL | 811.72 ns | 4.32 | 808 B |
-| MELSrcGen | 917.01 ns | 4.88 | 904 B |
-| Serilog | 730.01 ns | 3.88 | 1216 B |
-| ZLogger | 404.19 ns | 2.15 | - |
-| NLog | 653.08 ns | 3.47 | 1368 B |
-| Log4Net | 332.17 ns | 1.77 | 888 B |
-| ZeroLog | 306.35 ns | 1.63 | - |
+| **Clip** | 191.75 ns | 1.00 | 72 B |
+| **ClipZero** | 139.92 ns | 0.73 | - |
+| **ClipMEL** | 383.09 ns | 2.00 | 608 B |
+| MEL | 811.72 ns | 4.23 | 808 B |
+| MELSrcGen | 917.01 ns | 4.78 | 904 B |
+| Serilog | 730.01 ns | 3.81 | 1216 B |
+| ZLogger | 404.19 ns | 2.11 | - |
+| NLog | 653.08 ns | 3.41 | 1368 B |
+| Log4Net | 332.17 ns | 1.73 | 888 B |
+| ZeroLog | 306.35 ns | 1.60 | - |
 
 > **Clip:** Ergonomic tier allocates one anonymous object (40 B); fields extracted via compiled expression trees (cached per type). Zero-alloc tier passes fields as stack-allocated structs — no boxing, no heap allocation. Both write typed values into the same pooled byte buffer.
 
@@ -281,14 +281,14 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 
 | Logger | Mean | vs Clip | Allocated |
 |--------|-----:|--------:|----------:|
-| **Clip** | 127.06 ns | 1.00 | 232 B |
-| **ClipZero** | 110.90 ns | 0.87 | 176 B |
-| **ClipMEL** | 239.12 ns | 1.88 | 576 B |
-| MEL | 601.33 ns | 4.73 | 792 B |
-| MELSrcGen | 609.39 ns | 4.80 | 808 B |
-| Serilog | 687.15 ns | 5.41 | 1344 B |
-| ZLogger | 388.59 ns | 3.06 | 200 B |
-| NLog | 454.57 ns | 3.58 | 1288 B |
+| **Clip** | 132.00 ns | 1.00 | 232 B |
+| **ClipZero** | 109.48 ns | 0.83 | 176 B |
+| **ClipMEL** | 234.58 ns | 1.78 | 576 B |
+| MEL | 601.33 ns | 4.56 | 792 B |
+| MELSrcGen | 609.39 ns | 4.62 | 808 B |
+| Serilog | 687.15 ns | 5.21 | 1344 B |
+| ZLogger | 388.59 ns | 2.94 | 200 B |
+| NLog | 454.57 ns | 3.44 | 1288 B |
 
 > **Clip:** Context stored in AsyncLocal<Field[]>. Ergonomic tier allocates an anonymous object for call-site fields; zero-alloc tier passes them as stack-allocated structs. Context and call-site fields merged at write time.
 
@@ -335,16 +335,16 @@ logger.Error("Connection failed", ex, new {
 
 | Logger | Mean | vs Clip | Allocated |
 |--------|-----:|--------:|----------:|
-| **Clip** | 1,726.42 ns | 1.00 | 2384 B |
-| **ClipZero** | 1,643.80 ns | 0.95 | 2352 B |
-| **ClipMEL** | 1,777.05 ns | 1.03 | 2648 B |
-| MEL | 3,231.40 ns | 1.87 | 4024 B |
-| MELSrcGen | 3,774.82 ns | 2.19 | 4017 B |
-| Serilog | 2,189.35 ns | 1.27 | 3864 B |
+| **Clip** | 1,715.32 ns | 1.00 | 2384 B |
+| **ClipZero** | 1,692.00 ns | 0.99 | 2352 B |
+| **ClipMEL** | 1,805.57 ns | 1.05 | 2648 B |
+| MEL | 3,231.40 ns | 1.88 | 4024 B |
+| MELSrcGen | 3,774.82 ns | 2.20 | 4017 B |
+| Serilog | 2,189.35 ns | 1.28 | 3864 B |
 | ZLogger | 599.03 ns | 0.35 | 1377 B |
-| NLog | 2,213.76 ns | 1.28 | 4040 B |
-| Log4Net | 2,383.64 ns | 1.38 | 4449 B |
-| ZeroLog | 2,182.29 ns | 1.26 | 2736 B |
+| NLog | 2,213.76 ns | 1.29 | 4040 B |
+| Log4Net | 2,383.64 ns | 1.39 | 4449 B |
+| ZeroLog | 2,182.29 ns | 1.27 | 2736 B |
 
 > **Clip:** Exception rendered synchronously into the same pooled byte buffer.
 
@@ -423,13 +423,13 @@ logger.Info("Request handled");
 
 | Logger | Mean | vs Clip | Allocated |
 |--------|-----:|--------:|----------:|
-| **Clip** | 28.03 ns | 1.00 | - |
-| **ClipZero** | 28.13 ns | 1.00 | - |
-| MEL | 962.46 ns | 34.34 | 784 B |
-| MELSrcGen | 1,083.35 ns | 38.65 | 752 B |
-| Serilog | 296.88 ns | 10.59 | 608 B |
-| ZLogger | 345.03 ns | 12.31 | - |
-| NLog | 170.71 ns | 6.09 | 288 B |
+| **Clip** | 27.81 ns | 1.00 | - |
+| **ClipZero** | 27.74 ns | 1.00 | - |
+| MEL | 962.46 ns | 34.61 | 784 B |
+| MELSrcGen | 1,083.35 ns | 38.96 | 752 B |
+| Serilog | 296.88 ns | 10.68 | 608 B |
+| ZLogger | 345.03 ns | 12.41 | - |
+| NLog | 170.71 ns | 6.14 | 288 B |
 
 > **Clip:** Builds JSON as raw UTF-8 bytes into a pooled buffer. String values are escaped using SIMD.
 
@@ -475,13 +475,13 @@ logger.Info("Request handled", new {
 
 | Logger | Mean | vs Clip | Allocated |
 |--------|-----:|--------:|----------:|
-| **Clip** | 178.98 ns | 1.00 | 72 B |
-| **ClipZero** | 129.29 ns | 0.72 | - |
-| MEL | 2,033.44 ns | 11.36 | 1824 B |
-| MELSrcGen | 2,250.46 ns | 12.57 | 2272 B |
-| Serilog | 1,111.71 ns | 6.21 | 1408 B |
-| ZLogger | 324.29 ns | 1.81 | 326 B |
-| NLog | 1,051.19 ns | 5.87 | 1384 B |
+| **Clip** | 184.19 ns | 1.00 | 72 B |
+| **ClipZero** | 130.55 ns | 0.71 | - |
+| MEL | 2,033.44 ns | 11.04 | 1824 B |
+| MELSrcGen | 2,250.46 ns | 12.22 | 2272 B |
+| Serilog | 1,111.71 ns | 6.04 | 1408 B |
+| ZLogger | 324.29 ns | 1.76 | 326 B |
+| NLog | 1,051.19 ns | 5.71 | 1384 B |
 
 > **Clip:** Ergonomic tier allocates one anonymous object (40 B); fields extracted via expression trees. Zero-alloc tier passes stack-allocated structs directly. Both write typed JSON values with no boxing and no intermediate strings.
 
@@ -524,13 +524,13 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 
 | Logger | Mean | vs Clip | Allocated |
 |--------|-----:|--------:|----------:|
-| **Clip** | 128.08 ns | 1.00 | 232 B |
-| **ClipZero** | 109.97 ns | 0.86 | 176 B |
-| MEL | 1,616.38 ns | 12.62 | 1440 B |
-| MELSrcGen | 1,873.38 ns | 14.63 | 1432 B |
-| Serilog | 817.03 ns | 6.38 | 1432 B |
-| ZLogger | 1,188.49 ns | 9.28 | 286 B |
-| NLog | 563.18 ns | 4.40 | 1288 B |
+| **Clip** | 129.50 ns | 1.00 | 232 B |
+| **ClipZero** | 110.63 ns | 0.85 | 176 B |
+| MEL | 1,616.38 ns | 12.48 | 1440 B |
+| MELSrcGen | 1,873.38 ns | 14.47 | 1432 B |
+| Serilog | 817.03 ns | 6.31 | 1432 B |
+| ZLogger | 1,188.49 ns | 9.18 | 286 B |
+| NLog | 563.18 ns | 4.35 | 1288 B |
 
 > **Clip:** Ergonomic tier allocates an anonymous object for call-site fields; zero-alloc tier uses stack-allocated structs. Context and call-site fields merged at write time into the same pooled buffer.
 
@@ -577,13 +577,13 @@ logger.Error("Connection failed", ex, new {
 
 | Logger | Mean | vs Clip | Allocated |
 |--------|-----:|--------:|----------:|
-| **Clip** | 1,706.64 ns | 1.00 | 2384 B |
-| **ClipZero** | 1,673.80 ns | 0.98 | 2352 B |
-| MEL | 4,475.70 ns | 2.62 | 4265 B |
-| MELSrcGen | 4,542.27 ns | 2.66 | 4273 B |
-| Serilog | 2,494.88 ns | 1.46 | 3665 B |
-| ZLogger | 753.70 ns | 0.44 | 1376 B |
-| NLog | 2,471.18 ns | 1.45 | 4336 B |
+| **Clip** | 1,745.08 ns | 1.00 | 2384 B |
+| **ClipZero** | 1,715.16 ns | 0.98 | 2352 B |
+| MEL | 4,475.70 ns | 2.56 | 4265 B |
+| MELSrcGen | 4,542.27 ns | 2.60 | 4273 B |
+| Serilog | 2,494.88 ns | 1.43 | 3665 B |
+| ZLogger | 753.70 ns | 0.43 | 1376 B |
+| NLog | 2,471.18 ns | 1.42 | 4336 B |
 
 > **Clip:** Exception serialized as a structured JSON object synchronously into the pooled buffer.
 
