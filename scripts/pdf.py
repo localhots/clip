@@ -4,11 +4,11 @@
 Usage:
     python3 scripts/pdf.py
 
-Requires: weasyprint, markdown, Pygments
-    pip install -r scripts/requirements.txt
+Requires: uv sync
     brew install pango  (macOS system dependency for weasyprint)
 """
 
+import html as html_mod
 import re
 from pathlib import Path
 
@@ -30,17 +30,17 @@ _pygments_css = _formatter.get_style_defs(".highlight")
 
 # Match <code class="language-xxx">...</code> inside <pre> tags
 _CODE_BLOCK_RE = re.compile(
-    r'<pre><code class="language-(\w+)">(.*?)</code></pre>',
-    re.DOTALL,
+  r'<pre><code class="language-(\w+)">(.*?)</code></pre>',
+  re.DOTALL,
 )
 # Match bare <pre><code>...</code></pre> (no language specified)
 _CODE_BARE_RE = re.compile(
-    r"<pre><code>(.*?)</code></pre>",
-    re.DOTALL,
+  r"<pre><code>(.*?)</code></pre>",
+  re.DOTALL,
 )
 
 CSS = (
-    """
+  """
 @page {
     size: A4;
     margin: 18mm 16mm;
@@ -143,89 +143,79 @@ hr {
     height: 0;
 }
 """
-    + _pygments_css
+  + _pygments_css
 )
 
 
 def _highlight_match(m):
-    """Replace a <pre><code class="language-x"> block with Pygments HTML."""
-    lang = m.group(1)
-    code = m.group(2)
-    code = (
-        code.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-        .replace("&quot;", '"')
-    )
-    try:
-        lexer = get_lexer_by_name(lang)
-    except Exception:
-        lexer = TextLexer()
-    return highlight(code, lexer, _formatter)
+  """Replace a <pre><code class="language-x"> block with Pygments HTML."""
+  lang = m.group(1)
+  code = m.group(2)
+  code = html_mod.unescape(code)
+  try:
+    lexer = get_lexer_by_name(lang)
+  except Exception:
+    lexer = TextLexer()
+  return highlight(code, lexer, _formatter)
 
 
 def _highlight_bare(m):
-    """Replace a bare <pre><code> block — guess the language."""
-    code = m.group(1)
-    code = (
-        code.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-        .replace("&quot;", '"')
-    )
-    try:
-        lexer = guess_lexer(code)
-    except Exception:
-        lexer = TextLexer()
-    return highlight(code, lexer, _formatter)
+  """Replace a bare <pre><code> block — guess the language."""
+  code = m.group(1)
+  code = html_mod.unescape(code)
+  try:
+    lexer = guess_lexer(code)
+  except Exception:
+    lexer = TextLexer()
+  return highlight(code, lexer, _formatter)
 
 
 _TABLE_RE = re.compile(r"<table>.*?</table>", re.DOTALL)
 
 
 def _strip_tables_after_first_hr(html: str) -> str:
-    """Strip benchmark data tables but keep tables before the first <hr> (e.g. feature matrix)."""
-    idx = html.find("<hr")
-    if idx < 0:
-        return _TABLE_RE.sub("", html)
-    return html[:idx] + _TABLE_RE.sub("", html[idx:])
+  """Strip benchmark data tables but keep tables before the first <hr> (e.g. feature matrix)."""
+  idx = html.find("<hr")
+  if idx < 0:
+    return _TABLE_RE.sub("", html)
+  return html[:idx] + _TABLE_RE.sub("", html[idx:])
 
 
 def convert(md_path: Path, pdf_path: Path, strip_tables: bool = False):
-    text = md_path.read_text()
-    html_body = markdown.markdown(
-        text,
-        extensions=["fenced_code", "tables"],
-    )
-    html_body = _CODE_BLOCK_RE.sub(_highlight_match, html_body)
-    html_body = _CODE_BARE_RE.sub(_highlight_bare, html_body)
-    if strip_tables:
-        html_body = _strip_tables_after_first_hr(html_body)
+  text = md_path.read_text()
+  html_body = markdown.markdown(
+    text,
+    extensions=["fenced_code", "tables"],
+  )
+  html_body = _CODE_BLOCK_RE.sub(_highlight_match, html_body)
+  html_body = _CODE_BARE_RE.sub(_highlight_bare, html_body)
+  if strip_tables:
+    html_body = _strip_tables_after_first_hr(html_body)
 
-    full_html = (
-        "<!DOCTYPE html><html><head>"
-        '<meta charset="utf-8">'
-        f"<style>{CSS}</style>"
-        f"</head><body>{html_body}</body></html>"
-    )
-    HTML(
-        string=full_html,
-        base_url=str(ROOT_DIR),
-    ).write_pdf(str(pdf_path))
+  full_html = (
+    "<!DOCTYPE html><html><head>"
+    '<meta charset="utf-8">'
+    f"<style>{CSS}</style>"
+    f"</head><body>{html_body}</body></html>"
+  )
+  HTML(
+    string=full_html,
+    base_url=str(ROOT_DIR),
+  ).write_pdf(str(pdf_path))
 
 
 def main():
-    PDF_DIR.mkdir(parents=True, exist_ok=True)
-    for name in MD_FILES:
-        md_path = DOCS_DIR / name
-        if not md_path.exists():
-            print(f"  skip {name} (not found)")
-            continue
-        pdf_path = PDF_DIR / name.replace(".md", ".pdf")
-        strip = name == "COMPARE.md"
-        convert(md_path, pdf_path, strip_tables=strip)
-        print(f"  {pdf_path}")
+  PDF_DIR.mkdir(parents=True, exist_ok=True)
+  for name in MD_FILES:
+    md_path = DOCS_DIR / name
+    if not md_path.exists():
+      print(f"  skip {name} (not found)")
+      continue
+    pdf_path = PDF_DIR / name.replace(".md", ".pdf")
+    strip = name == "COMPARE.md"
+    convert(md_path, pdf_path, strip_tables=strip)
+    print(f"  {pdf_path}")
 
 
 if __name__ == "__main__":
-    main()
+  main()
