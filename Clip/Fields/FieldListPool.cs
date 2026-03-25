@@ -1,27 +1,34 @@
 namespace Clip.Fields;
 
 /// <summary>
-/// Single-item-per-thread pool for List&lt;Field&gt;. Avoids allocating a new list
+/// Two-slot-per-thread pool for List&lt;Field&gt;. Avoids allocating a new list
 /// on every log call while keeping the design lock-free (ThreadStatic).
+/// Two slots support nested rental: Logger rents the outer list for field
+/// accumulation, WriteWithEnrichers rents the inner list for per-sink enrichment.
 /// </summary>
 internal static class FieldListPool
 {
     [ThreadStatic]
-    private static List<Field>? _tCached;
+    private static List<Field>? _tOuter;
 
-    private const int CacheListSize = 16;
+    [ThreadStatic]
+    private static List<Field>? _tInner;
+
+    private const int InitialCapacity = 16;
 
     public static List<Field> Rent()
     {
-        var list = _tCached;
-        if (list == null) return new List<Field>(CacheListSize);
-        _tCached = null;
-        return list;
+        var list = _tOuter;
+        if (list != null) { _tOuter = null; return list; }
+        list = _tInner;
+        if (list != null) { _tInner = null; return list; }
+        return new List<Field>(InitialCapacity);
     }
 
     public static void Return(List<Field> list)
     {
         list.Clear();
-        _tCached = list;
+        if (_tOuter == null) _tOuter = list;
+        else _tInner = list;
     }
 }
