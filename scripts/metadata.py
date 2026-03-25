@@ -13,6 +13,8 @@ CAVEATS: per-logger fairness notes. Each entry is
 EXCLUDES: loggers to filter out of specific categories.
 """
 
+import re
+
 # Short explanation of what each benchmark category measures.
 # Keyed by section name or subcategory name (same matching rules).
 
@@ -903,6 +905,18 @@ LOGGER_ORDER = [
     "Log4Net",
     "ZeroLog",
 ]
+
+
+UNIT_NS = {"ns": 1, "μs": 1_000, "us": 1_000, "ms": 1_000_000, "s": 1_000_000_000}
+
+
+def parse_mean_ns(value: str) -> float | None:
+    """Convert a BDN mean string like '27.22 ns' to nanoseconds."""
+    m = re.match(r"([0-9.,]+)\s*(ns|μs|us|ms|s)", value.strip())
+    if not m:
+        return None
+    num = float(m.group(1).replace(",", ""))
+    return num * UNIT_NS[m.group(2)]
 
 
 def parse_table(text: str) -> list[dict[str, str]]:

@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""Generate comparison bar charts from current BenchmarkDotNet artifacts.
+"""Generate comparison bar charts from the benchmark database.
 
-Reads BDN markdown report files and produces horizontal bar charts
+Reads tmp/benchdb.json and produces horizontal bar charts
 as SVG files — no matplotlib or numpy required.
 
 Usage:
     python3 scripts/chart.py
-    python3 scripts/chart.py --dir path/to/artifacts
+    python3 scripts/chart.py --db path/to/benchdb.json
 """
 
 import argparse
 import html
-import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from metadata import get_excludes, parse_table, strip_prefix, LOGGER_ORDER
+from metadata import get_excludes, strip_prefix, parse_mean_ns, LOGGER_ORDER
 
-ARTIFACTS_DIR = Path("tmp/BenchmarkDotNet.Artifacts/results")
+from benchdb_reader import load_db, load_class_rows
+
+DB_PATH = Path("tmp/benchdb.json")
 CHARTS_DIR = Path("tmp/charts")
 
 LOGGER_COLORS = {
@@ -35,8 +36,6 @@ LOGGER_COLORS = {
     "ZeroLog": "#e76f51",
 }
 DEFAULT_COLOR = "#adb5bd"
-
-UNIT_NS = {"ns": 1, "μs": 1_000, "us": 1_000, "ms": 1_000_000, "s": 1_000_000_000}
 
 #
 # Layout constants
@@ -58,15 +57,6 @@ BG_COLOR = "white"
 LABEL_COLOR = "#374151"
 VALUE_COLOR = "#374151"
 VALUE_COLOR_INSIDE = "white"
-
-
-def parse_mean_ns(value: str) -> float | None:
-    """Convert a BDN mean string like '27.22 ns' to nanoseconds."""
-    m = re.match(r"([0-9.,]+)\s*(ns|μs|us|ms|s)", value.strip())
-    if not m:
-        return None
-    num = float(m.group(1).replace(",", ""))
-    return num * UNIT_NS[m.group(2)]
 
 
 def parse_alloc(value: str) -> str:
@@ -146,13 +136,9 @@ def make_chart(names: list[str], values: list[float], allocs: list[str], path: P
     print(f"  {path}")
 
 
-def process_report(artifacts: Path, bench_name: str):
-    """Parse one BDN report and generate charts per category."""
-    report = artifacts / f"Clip.Benchmarks.{bench_name}-report-github.md"
-    if not report.exists():
-        return
-
-    rows = parse_table(report.read_text())
+def process_class(bench_name: str, db: dict):
+    """Load one benchmark class from the DB and generate charts per category."""
+    rows = load_class_rows(bench_name, db)
     if not rows:
         return
 
@@ -166,8 +152,6 @@ def process_report(artifacts: Path, bench_name: str):
         if not method or not mean_str:
             continue
 
-        # Filtered benchmarks have no Categories column;
-        # only treat as "Filtered" when processing that specific report.
         if not cat:
             if bench_name == "FilteredBenchmarks":
                 cat = "Filtered"
@@ -196,20 +180,17 @@ def process_report(artifacts: Path, bench_name: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate comparison bar charts from BDN artifacts."
+        description="Generate comparison bar charts from benchmark database."
     )
     parser.add_argument(
-        "--dir",
+        "--db",
         type=Path,
-        default=ARTIFACTS_DIR,
-        help="Path to BDN artifacts directory",
+        default=DB_PATH,
+        help="Path to benchdb.json",
     )
     args = parser.parse_args()
-    artifacts = args.dir
 
-    if not artifacts.exists():
-        print(f"Artifacts directory not found: {artifacts}", file=sys.stderr)
-        sys.exit(1)
+    db = load_db(args.db)
 
     CHARTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -221,7 +202,7 @@ def main():
 
     print("Generating comparison charts...")
     for bench in ("FilteredBenchmarks", "ConsoleBenchmarks", "JsonBenchmarks"):
-        process_report(artifacts, bench)
+        process_class(bench, db)
 
     print("Done.")
 
