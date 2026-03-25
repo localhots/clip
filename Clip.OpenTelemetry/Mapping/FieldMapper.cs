@@ -1,3 +1,4 @@
+using System.Globalization;
 using OpenTelemetry.Proto.Common.V1;
 using SeverityNumber = OpenTelemetry.Proto.Logs.V1.SeverityNumber;
 
@@ -49,7 +50,7 @@ internal static class FieldMapper
                 StringValue = new DateTimeOffset(field.LongValue, TimeSpan.Zero).ToString("o"),
             },
             FieldType.String => new AnyValue { StringValue = (string?)field.RefValue ?? "" },
-            FieldType.Decimal => new AnyValue { StringValue = field.DecimalValue.ToString() },
+            FieldType.Decimal => new AnyValue { StringValue = field.DecimalValue.ToString(CultureInfo.InvariantCulture) },
             FieldType.Guid => new AnyValue { StringValue = field.GuidValue.ToString() },
             _ => new AnyValue { StringValue = field.RefValue?.ToString() ?? "" },
         };

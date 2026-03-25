@@ -1073,7 +1073,7 @@ def render_caveats(category):
   # Sort: logger-specific entries by LOGGER_ORDER, general entries last
   entries.sort(
     key=lambda e: (
-      _CAVEAT_RANK.get(e.get("logger", ""), len(_CAVEAT_LOGGER_ORDER)),
+      _CAVEAT_RANK.get(e.get("logger", ""), len(LOGGER_ORDER)),
       0 if e.get("logger") else 1,
     )
   )

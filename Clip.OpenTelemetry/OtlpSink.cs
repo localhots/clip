@@ -1,8 +1,10 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Threading.Channels;
 using Clip.OpenTelemetry.Export;
 using Clip.OpenTelemetry.Mapping;
 using Clip.Sinks;
+using Google.Protobuf;
 using OpenTelemetry.Proto.Collector.Logs.V1;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Logs.V1;
@@ -80,6 +82,25 @@ public sealed class OtlpSink : ILogSink
                 Key = "service.version",
                 Value = new AnyValue { StringValue = version },
             });
+        var sdkVersion = typeof(OtlpSink).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+        if (!options.ResourceAttributes.ContainsKey("telemetry.sdk.name"))
+            resource.Attributes.Add(new KeyValue
+            {
+                Key = "telemetry.sdk.name",
+                Value = new AnyValue { StringValue = "Clip" },
+            });
+        if (!options.ResourceAttributes.ContainsKey("telemetry.sdk.language"))
+            resource.Attributes.Add(new KeyValue
+            {
+                Key = "telemetry.sdk.language",
+                Value = new AnyValue { StringValue = "dotnet" },
+            });
+        if (!options.ResourceAttributes.ContainsKey("telemetry.sdk.version"))
+            resource.Attributes.Add(new KeyValue
+            {
+                Key = "telemetry.sdk.version",
+                Value = new AnyValue { StringValue = sdkVersion },
+            });
         foreach (var (key, value) in options.ResourceAttributes)
             resource.Attributes.Add(new KeyValue
             {
@@ -92,7 +113,7 @@ public sealed class OtlpSink : ILogSink
             Scope = new InstrumentationScope
             {
                 Name = "Clip",
-                Version = typeof(OtlpSink).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+                Version = sdkVersion,
             },
         };
 
@@ -124,7 +145,12 @@ public sealed class OtlpSink : ILogSink
             fields.CopyTo(fieldArray);
         }
 
-        var entry = new LogEntry(timestamp, level, message, fieldArray, fieldCount, exception);
+        var activity = Activity.Current;
+        var entry = new LogEntry(
+            timestamp, level, message, fieldArray, fieldCount, exception,
+            activity?.TraceId ?? default,
+            activity?.SpanId ?? default,
+            activity?.ActivityTraceFlags ?? default);
         if (!_channel.Writer.TryWrite(entry) && fieldCount > 0)
             ArrayPool<Field>.Shared.Return(fieldArray, true);
     }
@@ -202,6 +228,9 @@ public sealed class OtlpSink : ILogSink
     {
         _scopeLogs.LogRecords.Clear();
 
+        var traceBytes = new byte[16];
+        var spanBytes = new byte[8];
+
         foreach (var entry in batch)
         {
             var (severityNumber, severityText) = FieldMapper.ToSeverity(entry.Level);
@@ -214,6 +243,21 @@ public sealed class OtlpSink : ILogSink
                 SeverityText = severityText,
                 Body = new AnyValue { StringValue = entry.Message },
             };
+
+            if (entry.TraceId != default)
+            {
+                entry.TraceId.CopyTo(traceBytes);
+                record.TraceId = ByteString.CopyFrom(traceBytes);
+            }
+
+            if (entry.SpanId != default)
+            {
+                entry.SpanId.CopyTo(spanBytes);
+                record.SpanId = ByteString.CopyFrom(spanBytes);
+            }
+
+            if (entry.TraceFlags != ActivityTraceFlags.None)
+                record.Flags = (uint)entry.TraceFlags;
 
             var fields = entry.Fields.AsSpan(0, entry.FieldCount);
             foreach (ref readonly var field in fields)
@@ -300,5 +344,8 @@ public sealed class OtlpSink : ILogSink
         string Message,
         Field[] Fields,
         int FieldCount,
-        Exception? Exception);
+        Exception? Exception,
+        ActivityTraceId TraceId,
+        ActivitySpanId SpanId,
+        ActivityTraceFlags TraceFlags);
 }
