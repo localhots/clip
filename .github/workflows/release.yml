@@ -26,7 +26,7 @@ jobs:
           dotnet pack Clip/Clip.csproj -c Release /p:Version=$VERSION /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg -o pkg --no-build
           dotnet pack Clip.OpenTelemetry/Clip.OpenTelemetry.csproj -c Release /p:Version=$VERSION /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg -o pkg --no-build
           dotnet pack Clip.Extensions.Logging/Clip.Extensions.Logging.csproj -c Release /p:Version=$VERSION /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg -o pkg --no-build
-          dotnet pack Clip.Analyzers/Clip.Analyzers.csproj -c Release /p:Version=$VERSION /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg -o pkg --no-build
+          dotnet pack Clip.Analyzers/Clip.Analyzers.csproj -c Release /p:Version=$VERSION -o pkg --no-build
 
       - name: NuGet login
         uses: NuGet/login@v1
