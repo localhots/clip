@@ -1,6 +1,6 @@
 .PHONY: help build test check
 .PHONY: fmt fmt-cs fmt-py
-.PHONY: bench bench-full bench-asm archive-bench
+.PHONY: bench bench-full bench-clip bench-clip-full bench-asm bench-update archive-bench
 .PHONY: charts docs pdf usage
 .PHONY: demo demo-console demo-json
 .PHONY: pkg
@@ -33,26 +33,41 @@ format-cs:
 
 ## Format Python scripts
 format-py:
-	.venv/bin/black scripts/
+	uv run ruff format scripts/
 
-## Run fast benchmarks (~40 min)
+## Run fast benchmarks — all loggers (~40 min, 5 data points)
 bench:
 	BENCH_MODE=fast dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*ConsoleBenchmarks*' '*JsonBenchmarks*' '*FilteredBenchmarks*'
 	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
-	@$(MAKE) archive-bench
-	@$(MAKE) docs
+	@$(MAKE) bench-update
 
-## Run full benchmarks (~90 min, publication-quality)
+## Run full benchmarks — all loggers (~1h45m, 50 data points)
 bench-full:
 	BENCH_MODE=full dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*ConsoleBenchmarks*' '*JsonBenchmarks*' '*FilteredBenchmarks*'
 	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
+	@$(MAKE) bench-update
+
+## Run fast benchmarks — Clip only (~12 min, 5 data points)
+bench-clip:
+	BENCH_MODE=fast dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*_Clip' '*_ClipZero' '*_ClipMEL'
+	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
+	@$(MAKE) bench-update
+
+## Run full benchmarks — Clip only (~30 min, 50 data points)
+bench-clip-full:
+	BENCH_MODE=full dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*_Clip' '*_ClipZero' '*_ClipMEL'
+	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
+	@$(MAKE) bench-update
+
+## Import results into DB and archive raw artifacts
+bench-update:
+	@uv run python3 scripts/benchdb.py import
 	@$(MAKE) archive-bench
-	@$(MAKE) docs
 
 ## Dump JIT assembly for Clip hot paths
 bench-asm:
-	BENCH_CONFIG=asm dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*FiveFields_Clip*'
-	BENCH_CONFIG=asm dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*WithContext_Clip*'
+	BENCH_MODE=asm dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*FiveFields_Clip*'
+	BENCH_MODE=asm dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*WithContext_Clip*'
 	@rm -f tmp/BenchmarkDotNet.AsmArtifacts/*.log
 
 ## Archive benchmark results to tmp/bench-history/
@@ -65,22 +80,22 @@ archive-bench:
 	cp tmp/BenchmarkDotNet.Artifacts/results/*.md tmp/BenchmarkDotNet.Artifacts/results/*.csv "$$dir/" 2>/dev/null; \
 	echo "Archived to $$dir"
 
-## Generate bar charts from BDN artifacts
+## Generate bar charts from benchmark database
 charts:
-	.venv/bin/python3 scripts/chart.py
+	uv run python3 scripts/chart.py
 
 ## Generate docs/COMPARE.md (depends on charts)
 docs: charts
-	.venv/bin/python3 scripts/compare.py
+	uv run python3 scripts/compare.py
 
 ## Generate PDFs from docs
 pdf: docs
-	.venv/bin/python3 scripts/pdf.py
+	uv run python3 scripts/pdf.py
 
 ## Generate docs/USAGE.md (code + output for all loggers)
 usage:
 	dotnet run -c Release --project Clip.ComparisonDemo > tmp/raw/usage.txt
-	.venv/bin/python3 scripts/usage.py tmp/raw/usage.txt
+	uv run python3 scripts/usage.py tmp/raw/usage.txt
 
 ## Run the demo app (console output)
 demo: demo-console
@@ -104,10 +119,9 @@ pkg:
 	@echo ""
 	@ls -lh pkg/*.nupkg
 
-## Create venv and install Python dependencies
+## Install Python dependencies
 setup:
-	python3 -m venv .venv
-	.venv/bin/pip install -r scripts/requirements.txt
+	uv sync
 
 ## Remove build artifacts and benchmark results
 clean:
