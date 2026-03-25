@@ -35,25 +35,25 @@ format-cs:
 format-py:
 	uv run ruff format scripts/
 
-## Run fast benchmarks — all loggers (~40 min)
+## Run fast benchmarks — all loggers (~40 min, 5 data points)
 bench:
 	BENCH_MODE=fast dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*ConsoleBenchmarks*' '*JsonBenchmarks*' '*FilteredBenchmarks*'
 	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
-## Run full benchmarks — all loggers (~90 min, publication-quality)
+## Run full benchmarks — all loggers (~1h45m, 50 data points)
 bench-full:
 	BENCH_MODE=full dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*ConsoleBenchmarks*' '*JsonBenchmarks*' '*FilteredBenchmarks*'
 	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
-## Run fast benchmarks — Clip only (~5 min)
+## Run fast benchmarks — Clip only (~12 min, 5 data points)
 bench-clip:
 	BENCH_MODE=fast dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*_Clip' '*_ClipZero' '*_ClipMEL'
 	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
-## Run full benchmarks — Clip only
+## Run full benchmarks — Clip only (~30 min, 50 data points)
 bench-clip-full:
 	BENCH_MODE=full dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*_Clip' '*_ClipZero' '*_ClipMEL'
 	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
@@ -66,8 +66,8 @@ bench-update:
 
 ## Dump JIT assembly for Clip hot paths
 bench-asm:
-	BENCH_CONFIG=asm dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*FiveFields_Clip*'
-	BENCH_CONFIG=asm dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*WithContext_Clip*'
+	BENCH_MODE=asm dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*FiveFields_Clip*'
+	BENCH_MODE=asm dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*WithContext_Clip*'
 	@rm -f tmp/BenchmarkDotNet.AsmArtifacts/*.log
 
 ## Archive benchmark results to tmp/bench-history/

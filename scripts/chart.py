@@ -25,8 +25,8 @@ CHARTS_DIR = Path("tmp/charts")
 
 LOGGER_COLORS = {
   "Clip": "#0077b6",
-  "ClipZero": "#00b4d8",
-  "ClipMEL": "#90e0ef",
+  "ClipZero": "#00a0c4",
+  "ClipMEL": "#40c9e0",
   "Serilog": "#e63946",
   "NLog": "#f4a261",
   "MEL": "#7b2d8b",
@@ -49,7 +49,7 @@ LABEL_WIDTH = 90
 LABEL_PAD = 8
 VALUE_PAD = 6
 RIGHT_MARGIN = 20
-INSIDE_LABEL_THRESHOLD = 0.45
+CHAR_WIDTH_ESTIMATE = 6.5  # approximate px per character at VALUE_FONT_SIZE
 FONT_FAMILY = "system-ui, -apple-system, sans-serif"
 LABEL_FONT_SIZE = 12
 VALUE_FONT_SIZE = 11
@@ -116,8 +116,9 @@ def make_chart(names: list[str], values: list[float], allocs: list[str], path: P
       f'rx="{BAR_RADIUS}" fill="{color}"/>'
     )
 
-    # Value label — inside the bar (white) if bar is wide enough, else outside (dark)
-    if bar_width > bar_area_width * INSIDE_LABEL_THRESHOLD:
+    # Value label — inside the bar unless the label physically won't fit
+    label_width = len(label) * CHAR_WIDTH_ESTIMATE + 2 * VALUE_PAD
+    if bar_width >= label_width:
       lines.append(
         f'<text x="{bar_x + bar_width - VALUE_PAD}" y="{cy}" '
         f'text-anchor="end" dominant-baseline="central" '
