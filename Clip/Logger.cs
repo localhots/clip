@@ -22,10 +22,11 @@ public sealed class Logger : ILogger, IZeroLogger
     /// <summary>The global minimum log level. Calls below this level are no-ops.</summary>
     public LogLevel MinLevel { get; }
 
-    private readonly struct SinkEntry(ILogSink sink, LogLevel minLevel)
+    private readonly struct SinkEntry(ILogSink sink, LogLevel minLevel, EnricherEntry[]? enrichers = null)
     {
         public readonly ILogSink Sink = sink;
         public readonly LogLevel MinLevel = minLevel;
+        public readonly EnricherEntry[]? Enrichers = enrichers;
     }
 
     private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors,
@@ -60,7 +61,7 @@ public sealed class Logger : ILogger, IZeroLogger
         var raw = config.WriteTo.Build();
         var sinks = new SinkEntry[raw.Length];
         for (var i = 0; i < raw.Length; i++)
-            sinks[i] = new SinkEntry(raw[i].Sink, raw[i].MinLevel);
+            sinks[i] = new SinkEntry(raw[i].Sink, raw[i].MinLevel, raw[i].Enrichers);
         return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build(),
             config.Filter.Build());
     }
@@ -384,13 +385,39 @@ public sealed class Logger : ILogger, IZeroLogger
             if (entry.MinLevel > level) continue;
             try
             {
-                entry.Sink.Write(ts, level, message, fields, exception);
+                if (entry.Enrichers == null)
+                    entry.Sink.Write(ts, level, message, fields, exception);
+                else
+                    WriteWithEnrichers(ts, level, message, fields, exception, in entry);
             }
             catch
             {
                 // Sink failure must not affect other sinks
             }
         }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void WriteWithEnrichers(DateTimeOffset ts, LogLevel level, string message,
+        ReadOnlySpan<Field> fields, Exception? exception, in SinkEntry entry)
+    {
+        var list = FieldListPool.Rent();
+        try
+        {
+            foreach (var f in fields) list.Add(f);
+
+            foreach (ref readonly var e in entry.Enrichers.AsSpan())
+            {
+                if (e.MinLevel > level) continue;
+                try { e.Enricher.Enrich(list); }
+                catch { }
+            }
+
+            var span = CollectionsMarshal.AsSpan(list);
+            var count = ProcessFields(span);
+            entry.Sink.Write(ts, level, message, span[..count], exception);
+        }
+        finally { FieldListPool.Return(list); }
     }
 
     public void Dispose()

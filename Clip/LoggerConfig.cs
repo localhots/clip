@@ -221,17 +221,17 @@ public sealed class RedactorConfig
 public sealed class SinkConfig
 {
     private readonly LoggerConfig _parent;
-    private readonly List<(ILogSink Sink, LogLevel MinLevel)> _sinks = [];
+    private readonly List<(ILogSink Sink, LogLevel MinLevel, EnricherEntry[]? Enrichers)> _sinks = [];
 
     internal SinkConfig(LoggerConfig parent)
     {
         _parent = parent;
     }
 
-    internal (ILogSink Sink, LogLevel MinLevel)[] Build()
+    internal (ILogSink Sink, LogLevel MinLevel, EnricherEntry[]? Enrichers)[] Build()
     {
         if (_sinks.Count == 0)
-            _sinks.Add((new ConsoleSink(), LogLevel.Trace));
+            _sinks.Add((new ConsoleSink(), LogLevel.Trace, null));
         return [.. _sinks];
     }
 
@@ -241,7 +241,7 @@ public sealed class SinkConfig
     /// <param name="minLevel">Minimum level for this sink. Entries below this level are not written.</param>
     public LoggerConfig Console(Stream? output = null, bool colors = true, LogLevel minLevel = LogLevel.Trace)
     {
-        _sinks.Add((new ConsoleSink(output, colors), minLevel));
+        _sinks.Add((new ConsoleSink(output, colors), minLevel, null));
         return _parent;
     }
 
@@ -251,7 +251,7 @@ public sealed class SinkConfig
     /// <param name="minLevel">Minimum level for this sink.</param>
     public LoggerConfig Console(ConsoleFormatConfig config, Stream? output = null, LogLevel minLevel = LogLevel.Trace)
     {
-        _sinks.Add((new ConsoleSink(config, output), minLevel));
+        _sinks.Add((new ConsoleSink(config, output), minLevel, null));
         return _parent;
     }
 
@@ -260,7 +260,7 @@ public sealed class SinkConfig
     /// <param name="minLevel">Minimum level for this sink.</param>
     public LoggerConfig Json(Stream? output = null, LogLevel minLevel = LogLevel.Trace)
     {
-        _sinks.Add((new JsonSink(output), minLevel));
+        _sinks.Add((new JsonSink(output), minLevel, null));
         return _parent;
     }
 
@@ -270,14 +270,14 @@ public sealed class SinkConfig
     /// <param name="minLevel">Minimum level for this sink.</param>
     public LoggerConfig Json(JsonFormatConfig config, Stream? output = null, LogLevel minLevel = LogLevel.Trace)
     {
-        _sinks.Add((new JsonSink(config, output), minLevel));
+        _sinks.Add((new JsonSink(config, output), minLevel, null));
         return _parent;
     }
 
     /// <summary>Adds a no-op sink that discards all entries. Useful for testing and benchmarks.</summary>
     public LoggerConfig Null()
     {
-        _sinks.Add((new NullSink(), LogLevel.Trace));
+        _sinks.Add((new NullSink(), LogLevel.Trace, null));
         return _parent;
     }
 
@@ -294,7 +294,7 @@ public sealed class SinkConfig
         int maxRetainedFiles = 7,
         LogLevel minLevel = LogLevel.Trace)
     {
-        _sinks.Add((new FileSink(path, maxFileSize, maxRetainedFiles), minLevel));
+        _sinks.Add((new FileSink(path, maxFileSize, maxRetainedFiles), minLevel, null));
         return _parent;
     }
 
@@ -313,7 +313,7 @@ public sealed class SinkConfig
         int maxRetainedFiles = 7,
         LogLevel minLevel = LogLevel.Trace)
     {
-        _sinks.Add((new FileSink(path, maxFileSize, maxRetainedFiles, config), minLevel));
+        _sinks.Add((new FileSink(path, maxFileSize, maxRetainedFiles, config), minLevel, null));
         return _parent;
     }
 
@@ -322,7 +322,7 @@ public sealed class SinkConfig
     /// <param name="minLevel">Minimum level for this sink.</param>
     public LoggerConfig Sink(ILogSink sink, LogLevel minLevel = LogLevel.Trace)
     {
-        _sinks.Add((sink, minLevel));
+        _sinks.Add((sink, minLevel, null));
         return _parent;
     }
 
@@ -345,8 +345,39 @@ public sealed class SinkConfig
     {
         var inner = new SinkConfig(_parent);
         configure(inner);
-        foreach (var (sink, sinkLevel) in inner.Build())
-            _sinks.Add((BackgroundSink.Create(sink, capacity), sinkLevel > minLevel ? sinkLevel : minLevel));
+        foreach (var (sink, sinkLevel, enrichers) in inner.Build())
+            _sinks.Add((BackgroundSink.Create(sink, capacity), sinkLevel > minLevel ? sinkLevel : minLevel, enrichers));
+        return _parent;
+    }
+
+    /// <summary>
+    /// Wraps inner sinks with per-sink enrichers. These enrichers only apply to the sinks
+    /// configured inside <paramref name="configureSinks"/>, not to other sinks on the logger.
+    /// Per-sink enricher fields go through the same filter, dedup, and redact pipeline as
+    /// global enricher fields.
+    /// </summary>
+    /// <param name="configureEnrichers">Configures the enrichers specific to these sinks.</param>
+    /// <param name="configureSinks">Configures the sinks that will receive the per-sink enricher fields.</param>
+    /// <param name="minLevel">Minimum level applied as a floor to all inner sinks.</param>
+    public LoggerConfig Enriched(
+        Action<SinkEnricherConfig> configureEnrichers,
+        Action<SinkConfig> configureSinks,
+        LogLevel minLevel = LogLevel.Trace)
+    {
+        var enricherConfig = new SinkEnricherConfig();
+        configureEnrichers(enricherConfig);
+        var enrichers = enricherConfig.Build();
+
+        if (enrichers == null)
+        {
+            configureSinks(this);
+            return _parent;
+        }
+
+        var inner = new SinkConfig(_parent);
+        configureSinks(inner);
+        foreach (var (sink, sinkLevel, _) in inner.Build())
+            _sinks.Add((sink, sinkLevel > minLevel ? sinkLevel : minLevel, enrichers));
         return _parent;
     }
 }
