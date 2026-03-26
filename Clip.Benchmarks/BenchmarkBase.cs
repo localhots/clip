@@ -111,10 +111,13 @@ public abstract class BenchmarkBase
     //
 
     private Microsoft.Extensions.Logging.ILoggerFactory _clipMelConsoleFactory = null!;
+    private Microsoft.Extensions.Logging.ILoggerFactory _clipMelJsonFactory = null!;
     private Microsoft.Extensions.Logging.ILoggerFactory _clipMelFilteredFactory = null!;
     protected Microsoft.Extensions.Logging.ILogger ClipMelConsole = null!;
+    protected Microsoft.Extensions.Logging.ILogger ClipMelJson = null!;
     protected Microsoft.Extensions.Logging.ILogger ClipMelFiltered = null!;
     private Logger _clipMelConsoleUnderlying = null!;
+    private Logger _clipMelJsonUnderlying = null!;
     private Logger _clipMelFilteredUnderlying = null!;
 
     //
@@ -333,6 +336,15 @@ public abstract class BenchmarkBase
         });
         ClipMelConsole = _clipMelConsoleFactory.CreateLogger("benchmark");
 
+        _clipMelJsonUnderlying = Logger.Create(c => c
+            .MinimumLevel(ClipLL.Info).WriteTo.Json(Stream.Null));
+        _clipMelJsonFactory = LoggerFactory.Create(b =>
+        {
+            b.SetMinimumLevel(MelLL.Information);
+            b.AddClip(_clipMelJsonUnderlying);
+        });
+        ClipMelJson = _clipMelJsonFactory.CreateLogger("benchmark");
+
         _clipMelFilteredUnderlying = Logger.Create(c => c
             .MinimumLevel(ClipLL.Info).WriteTo.Null());
         _clipMelFilteredFactory = LoggerFactory.Create(b =>
@@ -387,8 +399,10 @@ public abstract class BenchmarkBase
         _melJsonFactory.Dispose();
         _melFilteredFactory.Dispose();
         _clipMelConsoleFactory.Dispose();
+        _clipMelJsonFactory.Dispose();
         _clipMelFilteredFactory.Dispose();
         _clipMelConsoleUnderlying.Dispose();
+        _clipMelJsonUnderlying.Dispose();
         _clipMelFilteredUnderlying.Dispose();
         Console.SetOut(_savedConsoleOut);
         Console.SetError(_savedConsoleErr);
