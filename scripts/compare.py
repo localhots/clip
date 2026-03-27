@@ -25,7 +25,7 @@ from metadata import (
 )
 from benchdb_reader import load_db, load_class_rows, get_environment
 
-DB_PATH = Path("tmp/benchdb.json")
+DB_PATH = Path("docs/benchdb.json")
 OUTPUT_FILE = Path("docs/COMPARE.md")
 CHARTS_DIR = Path("tmp/charts")
 

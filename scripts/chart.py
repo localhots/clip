@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate comparison bar charts from the benchmark database.
 
-Reads tmp/benchdb.json and produces horizontal bar charts
+Reads docs/benchdb.json and produces horizontal bar charts
 as SVG files — no matplotlib or numpy required.
 
 Usage:
@@ -21,7 +21,7 @@ from metadata import get_excludes, strip_prefix, parse_mean_ns, LOGGER_ORDER
 from benchdb import BENCH_CLASSES
 from benchdb_reader import load_db, load_class_rows
 
-DB_PATH = Path("tmp/benchdb.json")
+DB_PATH = Path("docs/benchdb.json")
 CHARTS_DIR = Path("tmp/charts")
 
 LOGGER_COLORS = {

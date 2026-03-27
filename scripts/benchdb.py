@@ -16,7 +16,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path("tmp/benchdb.json")
+DB_PATH = Path("docs/benchdb.json")
 ARTIFACTS_DIR = Path("tmp/BenchmarkDotNet.Artifacts/results")
 
 BENCH_CLASSES = ("FilteredBenchmarks", "ConsoleBenchmarks", "JsonBenchmarks")

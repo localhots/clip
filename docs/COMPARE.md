@@ -1,8 +1,8 @@
 # Clip — Benchmark Comparison
 
-BenchmarkDotNet v0.15.8, macOS Tahoe 26.3.1 (25D2128) [Darwin 25.3.0]  
-Apple M5, 1 CPU, 10 logical and 10 physical cores  
-Run: 2026-03-26 16:26
+BenchmarkDotNet v0.15.8, Linux Debian GNU/Linux 12 (bookworm) (container)  
+.NET SDK 9.0.312  
+Run: 2026-03-27 01:15
 
 Clip is a zero-dependency structured logging library for .NET 9. It formats directly into pooled UTF-8 byte buffers — no intermediate strings, no allocations on the hot path, no background-thread tricks to hide latency.
 
@@ -425,6 +425,7 @@ logger.Info("Request handled");
 |--------|-----:|--------:|----------:|
 | **Clip** | 26.68 ns | 1.00 | - |
 | **ClipZero** | 27.01 ns | 1.01 | - |
+| **ClipMEL** | 61.61 ns | 2.31 | 64 B |
 | MEL | 837.89 ns | 31.41 | 784 B |
 | MELSrcGen | 802.90 ns | 30.09 | 752 B |
 | Serilog | 247.25 ns | 9.27 | 608 B |
@@ -477,6 +478,7 @@ logger.Info("Request handled", new {
 |--------|-----:|--------:|----------:|
 | **Clip** | 176.20 ns | 1.00 | 72 B |
 | **ClipZero** | 129.18 ns | 0.73 | - |
+| **ClipMEL** | 451.20 ns | 2.56 | 704 B |
 | MEL | 1,924.97 ns | 10.92 | 1824 B |
 | MELSrcGen | 1,931.31 ns | 10.96 | 2272 B |
 | Serilog | 911.76 ns | 5.17 | 1408 B |
@@ -526,6 +528,7 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 |--------|-----:|--------:|----------:|
 | **Clip** | 123.08 ns | 1.00 | 232 B |
 | **ClipZero** | 105.47 ns | 0.86 | 176 B |
+| **ClipMEL** | 222.10 ns | 1.80 | 576 B |
 | MEL | 1,310.36 ns | 10.65 | 1440 B |
 | MELSrcGen | 1,316.70 ns | 10.70 | 1432 B |
 | Serilog | 677.96 ns | 5.51 | 1432 B |
@@ -579,6 +582,7 @@ logger.Error("Connection failed", ex, new {
 |--------|-----:|--------:|----------:|
 | **Clip** | 1,713.26 ns | 1.00 | 2480 B |
 | **ClipZero** | 1,676.58 ns | 0.98 | 2448 B |
+| **ClipMEL** | 1,771.99 ns | 1.03 | 2464 B |
 | MEL | 3,751.33 ns | 2.19 | 4360 B |
 | MELSrcGen | 3,795.16 ns | 2.22 | 4368 B |
 | Serilog | 2,394.40 ns | 1.40 | 3760 B |
