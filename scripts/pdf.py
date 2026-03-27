@@ -142,6 +142,14 @@ hr {
     margin: 0;
     height: 0;
 }
+details {
+    margin: 4pt 0;
+}
+summary {
+    font-weight: 600;
+    font-size: 10pt;
+    margin-bottom: 4pt;
+}
 """
   + _pygments_css
 )
@@ -170,18 +178,7 @@ def _highlight_bare(m):
   return highlight(code, lexer, _formatter)
 
 
-_TABLE_RE = re.compile(r"<table>.*?</table>", re.DOTALL)
-
-
-def _strip_tables_after_first_hr(html: str) -> str:
-  """Strip benchmark data tables but keep tables before the first <hr> (e.g. feature matrix)."""
-  idx = html.find("<hr")
-  if idx < 0:
-    return _TABLE_RE.sub("", html)
-  return html[:idx] + _TABLE_RE.sub("", html[idx:])
-
-
-def convert(md_path: Path, pdf_path: Path, strip_tables: bool = False):
+def convert(md_path: Path, pdf_path: Path):
   text = md_path.read_text()
   html_body = markdown.markdown(
     text,
@@ -189,8 +186,6 @@ def convert(md_path: Path, pdf_path: Path, strip_tables: bool = False):
   )
   html_body = _CODE_BLOCK_RE.sub(_highlight_match, html_body)
   html_body = _CODE_BARE_RE.sub(_highlight_bare, html_body)
-  if strip_tables:
-    html_body = _strip_tables_after_first_hr(html_body)
 
   full_html = (
     "<!DOCTYPE html><html><head>"
@@ -212,8 +207,7 @@ def main():
       print(f"  skip {name} (not found)")
       continue
     pdf_path = PDF_DIR / name.replace(".md", ".pdf")
-    strip = name == "COMPARE.md"
-    convert(md_path, pdf_path, strip_tables=strip)
+    convert(md_path, pdf_path)
     print(f"  {pdf_path}")
 
 

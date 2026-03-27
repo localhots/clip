@@ -231,7 +231,7 @@ CAVEATS = {
     {
       "logger": "NLog",
       "text": (
-        "Allocates a log-event struct per call. Output is"
+        "Allocates a log-event object per call. Output is"
         " produced by a chain of layout renderers writing"
         " strings."
       ),
@@ -259,8 +259,9 @@ CAVEATS = {
       "logger": "ZLogger",
       "text": (
         "Enqueues the raw state to a background thread —"
-        " formatting is fully deferred. The benchmark"
-        " captures enqueue cost only."
+        " formatting is fully deferred. Under sustained"
+        " load the background queue fills up, adding"
+        " backpressure to the calling thread."
       ),
     },
     {
@@ -333,9 +334,10 @@ CAVEATS = {
     {
       "logger": "ZLogger",
       "text": (
-        "Background thread — enqueue cost only."
+        "Background thread — formatting deferred."
         " Interpolated-string handlers avoid boxing but add"
-        " struct construction overhead."
+        " struct construction overhead. Under sustained load,"
+        " backpressure from a full queue increases calling-thread cost."
       ),
     },
     {
@@ -467,7 +469,8 @@ CAVEATS = {
       "logger": "ZLogger",
       "text": (
         "Exception formatting deferred to a background"
-        " thread. The benchmark only measures enqueue cost."
+        " thread. Under sustained load, backpressure"
+        " causes high variance and inflated mean times."
       ),
     },
     {
@@ -494,15 +497,25 @@ CAVEATS = {
       "text": (
         "Exception benchmarks are not directly comparable"
         " across loggers — ZLogger defers formatting to a"
-        " background thread while all others format"
+        " background thread (with backpressure under"
+        " sustained load) while all others format"
         " synchronously."
       ),
     },
   ],
   #
-  # JSON-specific (applies to all Json_* charts)
+  # JSON-specific exclusion note (not on WithContext — it has its own)
   #
-  "Json": [
+  "Json_NoFields": [
+    {
+      "text": (
+        "Log4Net and ZeroLog are excluded from JSON"
+        " benchmarks. Log4Net has no JSON formatter."
+        " ZeroLog has no built-in JSON output mode."
+      ),
+    },
+  ],
+  "Json_FiveFields": [
     {
       "text": (
         "Log4Net and ZeroLog are excluded from JSON"
@@ -553,7 +566,7 @@ CAVEATS = {
     {
       "logger": "ZLogger",
       "text": (
-        "Background thread — benchmark measures enqueue cost only. Has a real JSON formatter."
+        "Background thread — formatting deferred. Has a real JSON formatter. Under sustained load, backpressure from a full queue increases calling-thread cost."
       ),
     },
   ],
@@ -598,9 +611,10 @@ CAVEATS = {
     {
       "logger": "ZLogger",
       "text": (
-        "Background thread — enqueue cost only."
+        "Background thread — formatting deferred."
         " Interpolated-string handlers avoid boxing but add"
-        " struct construction overhead."
+        " struct construction overhead. Under sustained load,"
+        " backpressure from a full queue increases calling-thread cost."
       ),
     },
   ],
@@ -689,15 +703,24 @@ CAVEATS = {
       "logger": "ZLogger",
       "text": (
         "Exception formatting deferred to a background"
-        " thread. The benchmark only measures enqueue cost."
+        " thread. Under sustained load, backpressure"
+        " causes high variance and inflated mean times."
       ),
     },
     {
       "text": (
         "Exception benchmarks are not directly comparable"
         " across loggers — ZLogger defers formatting to a"
-        " background thread while all others format"
+        " background thread (with backpressure under"
+        " sustained load) while all others format"
         " synchronously."
+      ),
+    },
+    {
+      "text": (
+        "Log4Net and ZeroLog are excluded from JSON"
+        " benchmarks. Log4Net has no JSON formatter."
+        " ZeroLog has no built-in JSON output mode."
       ),
     },
   ],

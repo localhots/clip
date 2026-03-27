@@ -126,4 +126,4 @@ setup:
 ## Remove build artifacts and benchmark results
 clean:
 	dotnet clean -c Release --nologo -v q
-	rm -rf tmp/BenchmarkDotNet.Artifacts tmp/BenchmarkDotNet.AsmArtifacts tmp/charts
+	rm -rf tmp/BenchmarkDotNet.Artifacts tmp/BenchmarkDotNet.AsmArtifacts

@@ -22,7 +22,7 @@ from benchdb import BENCH_CLASSES
 from benchdb_reader import load_db, load_class_rows
 
 DB_PATH = Path("docs/benchdb.json")
-CHARTS_DIR = Path("tmp/charts")
+CHARTS_DIR = Path("docs/charts")
 
 LOGGER_COLORS = {
   "Clip": "#0077b6",
@@ -87,9 +87,11 @@ def make_chart(names: list[str], values: list[float], allocs: list[str], path: P
   total_height = n * (BAR_HEIGHT + BAR_GAP) + BAR_GAP
 
   lines = [
-    f'<svg xmlns="http://www.w3.org/2000/svg" width="{CHART_WIDTH}" height="{total_height}"'
-    f' viewBox="0 0 {CHART_WIDTH} {total_height}" font-family="{FONT_FAMILY}">',
-    f'<rect width="{CHART_WIDTH}" height="{total_height}" fill="{BG_COLOR}"/>',
+    f'<svg xmlns="http://www.w3.org/2000/svg"',
+    f'     width="{CHART_WIDTH}" height="{total_height}"',
+    f'     viewBox="0 0 {CHART_WIDTH} {total_height}"',
+    f'     font-family="{FONT_FAMILY}">',
+    f'  <rect width="{CHART_WIDTH}" height="{total_height}" fill="{BG_COLOR}"/>',
   ]
 
   for i, (name, val, alloc) in enumerate(zip(names, values, allocs)):
@@ -104,37 +106,33 @@ def make_chart(names: list[str], values: list[float], allocs: list[str], path: P
     esc_label = html.escape(label)
     cy = y + BAR_HEIGHT / 2
 
-    # Logger name (right-aligned before the bar)
     lines.append(
-      f'<text x="{LABEL_WIDTH - LABEL_PAD}" y="{cy}" '
-      f'text-anchor="end" dominant-baseline="central" '
-      f'font-size="{LABEL_FONT_SIZE}" fill="{LABEL_COLOR}">{esc_name}</text>'
+      f'  <text x="{LABEL_WIDTH - LABEL_PAD}" y="{cy}"'
+      f' text-anchor="end" dominant-baseline="central"'
+      f' font-size="{LABEL_FONT_SIZE}" fill="{LABEL_COLOR}">{esc_name}</text>'
+    )
+    lines.append(
+      f'  <rect x="{bar_x}" y="{y}" width="{bar_width:.1f}" height="{BAR_HEIGHT}"'
+      f' rx="{BAR_RADIUS}" fill="{color}"/>'
     )
 
-    # Bar
-    lines.append(
-      f'<rect x="{bar_x}" y="{y}" width="{bar_width:.1f}" height="{BAR_HEIGHT}" '
-      f'rx="{BAR_RADIUS}" fill="{color}"/>'
-    )
-
-    # Value label — inside the bar unless the label physically won't fit
     label_width = len(label) * CHAR_WIDTH_ESTIMATE + 2 * VALUE_PAD
     if bar_width >= label_width:
       lines.append(
-        f'<text x="{bar_x + bar_width - VALUE_PAD}" y="{cy}" '
-        f'text-anchor="end" dominant-baseline="central" '
-        f'font-size="{VALUE_FONT_SIZE}" fill="{VALUE_COLOR_INSIDE}">{esc_label}</text>'
+        f'  <text x="{bar_x + bar_width - VALUE_PAD}" y="{cy}"'
+        f' text-anchor="end" dominant-baseline="central"'
+        f' font-size="{VALUE_FONT_SIZE}" fill="{VALUE_COLOR_INSIDE}">{esc_label}</text>'
       )
     else:
       lines.append(
-        f'<text x="{bar_x + bar_width + VALUE_PAD}" y="{cy}" '
-        f'text-anchor="start" dominant-baseline="central" '
-        f'font-size="{VALUE_FONT_SIZE}" fill="{VALUE_COLOR}">{esc_label}</text>'
+        f'  <text x="{bar_x + bar_width + VALUE_PAD}" y="{cy}"'
+        f' text-anchor="start" dominant-baseline="central"'
+        f' font-size="{VALUE_FONT_SIZE}" fill="{VALUE_COLOR}">{esc_label}</text>'
       )
 
   lines.append("</svg>")
 
-  path.write_text("\n".join(lines))
+  path.write_text("\n".join(lines) + "\n")
   print(f"  {path}")
 
 
