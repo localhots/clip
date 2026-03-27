@@ -34,9 +34,16 @@ CATEGORY_TITLES = {
   "FiveFields": "Five Fields",
   "WithException": "With Exception",
   "WithContext": "With Context",
+  "Enriched": "Enriched",
+  "FieldFiltered": "Field Filtered",
+  "Redacted": "Redacted",
+  "FullPipeline": "Full Pipeline",
 }
 
-CATEGORY_ORDER = ["NoFields", "FiveFields", "WithContext", "WithException"]
+CATEGORY_ORDER = [
+  "NoFields", "FiveFields", "WithContext", "WithException",
+  "Enriched", "FieldFiltered", "Redacted", "FullPipeline",
+]
 
 CLIP_NAMES = {"Clip", "ClipZero", "ClipMEL"}
 
@@ -270,6 +277,17 @@ def generate(db: dict) -> str:
       rows,
       "JSON",
       get_description("Json"),
+    )
+
+  lines += ["", "---"]
+
+  # Pipeline
+  rows = load_class_rows("PipelineBenchmarks", db)
+  if rows:
+    lines += emit_comparison(
+      rows,
+      "Pipeline",
+      get_description("Pipeline"),
     )
 
   return "\n".join(lines) + "\n"

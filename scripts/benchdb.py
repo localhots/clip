@@ -19,7 +19,7 @@ from pathlib import Path
 DB_PATH = Path("docs/benchdb.json")
 ARTIFACTS_DIR = Path("tmp/BenchmarkDotNet.Artifacts/results")
 
-BENCH_CLASSES = ("FilteredBenchmarks", "ConsoleBenchmarks", "JsonBenchmarks")
+BENCH_CLASSES = ("FilteredBenchmarks", "ConsoleBenchmarks", "JsonBenchmarks", "PipelineBenchmarks")
 
 # Columns to extract from BDN CSV files.
 FIELDS = {

@@ -178,7 +178,10 @@ def _highlight_bare(m):
   return highlight(code, lexer, _formatter)
 
 
-def convert(md_path: Path, pdf_path: Path):
+_DETAILS_RE = re.compile(r"<details>.*?</details>", re.DOTALL)
+
+
+def convert(md_path: Path, pdf_path: Path, strip_details: bool = False):
   text = md_path.read_text()
   html_body = markdown.markdown(
     text,
@@ -186,6 +189,8 @@ def convert(md_path: Path, pdf_path: Path):
   )
   html_body = _CODE_BLOCK_RE.sub(_highlight_match, html_body)
   html_body = _CODE_BARE_RE.sub(_highlight_bare, html_body)
+  if strip_details:
+    html_body = _DETAILS_RE.sub("", html_body)
 
   full_html = (
     "<!DOCTYPE html><html><head>"
@@ -207,7 +212,7 @@ def main():
       print(f"  skip {name} (not found)")
       continue
     pdf_path = PDF_DIR / name.replace(".md", ".pdf")
-    convert(md_path, pdf_path)
+    convert(md_path, pdf_path, strip_details=(name == "COMPARE.md"))
     print(f"  {pdf_path}")
 
 

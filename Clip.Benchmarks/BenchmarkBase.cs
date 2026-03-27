@@ -134,6 +134,23 @@ public abstract class BenchmarkBase
     // ReSharper disable once NotAccessedField.Local
     private IDisposable? _zeroLogSession;
 
+    //
+    // Pipeline benchmarks (enricher / filter / redactor)
+    //
+
+    protected ILogger ClipEnriched = null!;
+    protected ILogger ClipFieldFiltered = null!;
+    protected ILogger ClipRedacted = null!;
+    protected ILogger ClipFullPipeline = null!;
+    protected IZeroLogger ClipZeroEnriched = null!;
+    protected IZeroLogger ClipZeroFieldFiltered = null!;
+    protected IZeroLogger ClipZeroRedacted = null!;
+    protected IZeroLogger ClipZeroFullPipeline = null!;
+    protected Serilog.ILogger SerilogEnriched = null!;
+    private Serilog.Core.Logger _serilogEnrichedDispose = null!;
+    protected NLog.ILogger NlogEnriched = null!;
+    private NLog.LogFactory _nlogEnrichedFactory = null!;
+
     protected Exception SampleException = null!;
 
     //
@@ -354,6 +371,61 @@ public abstract class BenchmarkBase
         });
         ClipMelFiltered = _clipMelFilteredFactory.CreateLogger("benchmark");
 
+        //
+        // Pipeline loggers (enricher / filter / redactor)
+        //
+
+        var clipEnriched = Logger.Create(c => c
+            .MinimumLevel(ClipLL.Info)
+            .Enrich.Field("app", "benchmark")
+            .WriteTo.Console(Stream.Null, false));
+        ClipEnriched = clipEnriched;
+        ClipZeroEnriched = clipEnriched;
+
+        var clipFieldFiltered = Logger.Create(c => c
+            .MinimumLevel(ClipLL.Info)
+            .Filter.Fields("password")
+            .WriteTo.Console(Stream.Null, false));
+        ClipFieldFiltered = clipFieldFiltered;
+        ClipZeroFieldFiltered = clipFieldFiltered;
+
+        var clipRedacted = Logger.Create(c => c
+            .MinimumLevel(ClipLL.Info)
+            .Redact.Fields("Token")
+            .WriteTo.Console(Stream.Null, false));
+        ClipRedacted = clipRedacted;
+        ClipZeroRedacted = clipRedacted;
+
+        var clipFullPipeline = Logger.Create(c => c
+            .MinimumLevel(ClipLL.Info)
+            .Enrich.Field("app", "benchmark")
+            .Filter.Fields("password")
+            .Redact.Fields("Token")
+            .WriteTo.Console(Stream.Null, false));
+        ClipFullPipeline = clipFullPipeline;
+        ClipZeroFullPipeline = clipFullPipeline;
+
+        _serilogEnrichedDispose = new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .Enrich.WithProperty("app", "benchmark")
+            .WriteTo.Sink(new SerilogStreamSink(
+                new MessageTemplateTextFormatter(
+                    "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u4} {Message:lj} {Properties:j}{NewLine}{Exception}"),
+                nullWriter))
+            .CreateLogger();
+        SerilogEnriched = _serilogEnrichedDispose;
+
+        _nlogEnrichedFactory = CreateNLogFactory(
+            new NLogStreamTarget(nullWriter)
+            {
+                Name = "enriched",
+                Layout =
+                    @"${date:format=yyyy-MM-dd HH\:mm\:ss.fff} ${level:uppercase=true:padding=-4:truncate=4} ${message} app=${gdc:item=app} ${all-event-properties:separator= :includeScopeProperties=true}${onexception:${newline}${exception:format=tostring}}",
+            },
+            NLog.LogLevel.Info);
+        NLog.GlobalDiagnosticsContext.Set("app", "benchmark");
+        NlogEnriched = _nlogEnrichedFactory.GetLogger("benchmark");
+
         var zeroLogFormatter = new ZeroLog.Formatting.DefaultFormatter(
             new ZeroLog.Formatting.PatternWriter(
                 "%{date:yyyy-MM-dd HH:mm:ss.fff} %{level:pad} %message"));
@@ -404,6 +476,12 @@ public abstract class BenchmarkBase
         _clipMelConsoleUnderlying.Dispose();
         _clipMelJsonUnderlying.Dispose();
         _clipMelFilteredUnderlying.Dispose();
+        ClipEnriched.Dispose();
+        ClipFieldFiltered.Dispose();
+        ClipRedacted.Dispose();
+        ClipFullPipeline.Dispose();
+        _serilogEnrichedDispose.Dispose();
+        _nlogEnrichedFactory.Dispose();
         Console.SetOut(_savedConsoleOut);
         Console.SetError(_savedConsoleErr);
         _zloggerConsoleFactory.Dispose();

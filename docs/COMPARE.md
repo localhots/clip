@@ -1,8 +1,8 @@
 # Clip — Benchmark Comparison
 
-BenchmarkDotNet v0.15.8, Linux Debian GNU/Linux 12 (bookworm) (container)  
-.NET SDK 9.0.312  
-Run: 2026-03-27 00:48
+BenchmarkDotNet v0.15.8, macOS Tahoe 26.3.1 (25D2128) [Darwin 25.3.0]  
+Apple M5, 1 CPU, 10 logical and 10 physical cores  
+Run: 2026-03-27 11:48
 
 Clip is a zero-dependency structured logging library for .NET 9. It formats directly into pooled UTF-8 byte buffers — no intermediate strings, no allocations on the hot path, no background-thread tricks to hide latency.
 
@@ -45,10 +45,10 @@ This report puts Clip head-to-head against eight other .NET loggers, all writing
 
 | Pipeline | Clip | Serilog | NLog | MEL | ZLogger | Log4Net | ZeroLog |
 |---------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Enrichers | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| Enrichers | ✅ | ✅ | ✅ | — | — | — | — |
 | Level-Gated Enrichers | ✅ | ✅ | — | — | — | — | — |
 | Filters | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Redactors | ✅ | — | — | ✅ | — | — | — |
+| Redactors | ✅ | — | — | — | — | — | — |
 | Scoped Context | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
 
 | Output | Clip | Serilog | NLog | MEL | ZLogger | Log4Net | ZeroLog |
@@ -651,3 +651,139 @@ logger.Error("Connection failed", ex, new {
 <!-- -->
 
 > Log4Net and ZeroLog are excluded from JSON benchmarks. Log4Net has no JSON formatter. ZeroLog has no built-in JSON output mode.
+
+---
+
+## Pipeline
+
+Clip processes every log entry through a configurable pipeline before it reaches the sink. Three stages run in order:
+
+- **Enrichers** add fields to every log entry — machine name, service version, request ID. Enricher fields have the lowest priority: context and call-site fields override them on key collision. Each enricher can be level-gated so it only fires at or above a threshold (e.g., skip enrichment for Debug calls).
+- **Field filters** remove fields by key before they reach the sink. A filter returning `true` for a key causes that field to be dropped entirely — it never reaches redactors or sinks. Use cases: strip internal-only fields, remove verbose debug-only properties from production output.
+- **Redactors** transform field values in place. A redactor receives each field by ref and can replace its value — mask passwords, truncate tokens, scrub PII. Redactors run after filtering, so filtered fields are never redacted.
+
+The pipeline runs synchronously on the calling thread. These benchmarks measure each stage's overhead on a console log call with three fields. All output goes to `Stream.Null`.
+
+### Pipeline: Enriched
+
+An enricher adds one constant field (`app=benchmark`) to every log call. Measures enrichment overhead on top of normal three-field logging.
+
+```csharp
+// Clip
+var logger = Logger.Create(c => c
+    .Enrich.Field("app", "benchmark")
+    .WriteTo.Console());
+logger.Info("Request handled", new { Method, Status, Elapsed });
+```
+
+![Enriched](docs/charts/Enriched.svg)
+
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 148.93 ns | 0.314 ns | 0.598 ns | 1.00 | 40 B |
+| **ClipZero** | 145.20 ns | 0.164 ns | 0.320 ns | 0.97 | - |
+| Serilog | 641.26 ns | 2.742 ns | 5.150 ns | 4.31 | 1136 B |
+| NLog | 609.19 ns | 2.051 ns | 3.801 ns | 4.09 | 1248 B |
+
+</details>
+
+> **Clip:** Enricher configured via `.Enrich.Field("app", "benchmark")`. The field is added to the internal field list on every call. Enricher fields have the lowest priority — call-site and context fields override them on key collision.
+
+<!-- -->
+
+> **Serilog:** Enricher configured via `.Enrich.WithProperty("app", "benchmark")`. The property is added to every `LogEvent` object at construction time. No level gating — the enricher runs on every enabled call.
+
+<!-- -->
+
+> **NLog:** Global property via `GlobalDiagnosticsContext.Set()`, rendered through a `${gdc:item=app}` layout directive. The value is looked up from a concurrent dictionary on each render.
+
+### Pipeline: Field Filtered
+
+A field filter removes fields matching a key. Here a `password` field is passed but filtered out before it reaches the sink.
+
+```csharp
+// Clip
+var logger = Logger.Create(c => c
+    .Filter.Fields("password")
+    .WriteTo.Console());
+logger.Info("Request handled", new { Method, Status, password = "secret" });
+```
+
+![FieldFiltered](docs/charts/FieldFiltered.svg)
+
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 91.10 ns | 0.241 ns | 0.465 ns | 1.00 | 40 B |
+| **ClipZero** | 85.24 ns | 0.068 ns | 0.130 ns | 0.94 | - |
+
+</details>
+
+> **Clip:** Filter configured via `.Filter.Fields("password")`. Each field key is checked against a hash set. Filtered fields never reach redactors or sinks.
+
+<!-- -->
+
+> Field-level filtering is unique to Clip. Other loggers offer event-level filtering (suppressing entire log entries by level or category) but cannot selectively remove individual fields from an entry.
+
+### Pipeline: Redacted
+
+A redactor replaces field values by key. Here the `Token` field value is replaced with `***` before it reaches the sink.
+
+```csharp
+// Clip
+var logger = Logger.Create(c => c
+    .Redact.Fields("Token")
+    .WriteTo.Console());
+logger.Info("Request handled", new { Method, Status, Token = "bearer-abc" });
+```
+
+![Redacted](docs/charts/Redacted.svg)
+
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 106.22 ns | 0.171 ns | 0.317 ns | 1.00 | 40 B |
+| **ClipZero** | 100.30 ns | 0.105 ns | 0.194 ns | 0.94 | - |
+
+</details>
+
+> **Clip:** Redactor configured via `.Redact.Fields("Token")`. Each field is checked by key (case-insensitive) and matching values are replaced with `***`. Runs after filtering — filtered fields are never redacted.
+
+<!-- -->
+
+> Runtime field-value redaction is unique to Clip. MEL offers compile-time redaction via a separate package (`Microsoft.Extensions.Compliance.Redaction`) using data classification attributes — a fundamentally different approach.
+
+### Pipeline: Full Pipeline
+
+All three pipeline stages active at once: enricher adds a field, filter removes `password`, redactor replaces `Token` with `***`.
+
+```csharp
+var logger = Logger.Create(c => c
+    .Enrich.Field("app", "benchmark")
+    .Filter.Fields("password")
+    .Redact.Fields("Token")
+    .WriteTo.Console());
+logger.Info("Request handled",
+    new { Method, Status, Token = "bearer-abc", password = "secret" });
+```
+
+![FullPipeline](docs/charts/FullPipeline.svg)
+
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 165.41 ns | 0.354 ns | 0.682 ns | 1.00 | 48 B |
+| **ClipZero** | 162.99 ns | 0.849 ns | 1.553 ns | 0.99 | - |
+
+</details>
+
+> All three pipeline stages active: enricher adds `app=benchmark`, filter removes the `password` field, redactor replaces `Token` with `***`. The pipeline runs in a single pass — enrich, then filter + deduplicate + redact in one loop over the field list.
