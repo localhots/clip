@@ -757,6 +757,14 @@ FEATURE_TABLES = [
       ("mel_adapter", "MEL Adapter"),
     ],
   ),
+  (
+    "Hardening",
+    [
+      ("sanitize_controls", "Strips Control Chars / ANSI"),
+      ("inner_exception_cap", "InnerException Recursion Cap"),
+      ("entry_size_cap", "Per-Entry Size Cap"),
+    ],
+  ),
 ]
 
 FEATURES = {
@@ -780,6 +788,9 @@ FEATURES = {
     "buffer_pooling": True,
     "zero_deps": True,
     "mel_adapter": True,
+    "sanitize_controls": True,
+    "inner_exception_cap": "✅ 32",
+    "entry_size_cap": "✅ 4 MiB",
   },
   "Serilog": {
     "structured": True,
@@ -801,6 +812,9 @@ FEATURES = {
     "buffer_pooling": False,
     "zero_deps": False,
     "mel_adapter": True,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": False,
   },
   "NLog": {
     "structured": True,
@@ -822,6 +836,9 @@ FEATURES = {
     "buffer_pooling": True,
     "zero_deps": True,
     "mel_adapter": True,
+    "sanitize_controls": False,
+    "inner_exception_cap": "✅ 0¹",
+    "entry_size_cap": False,
   },
   "MEL": {
     "structured": True,
@@ -843,6 +860,9 @@ FEATURES = {
     "buffer_pooling": False,
     "zero_deps": False,
     "mel_adapter": False,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": False,
   },
   "ZLogger": {
     "structured": True,
@@ -864,6 +884,9 @@ FEATURES = {
     "buffer_pooling": True,
     "zero_deps": False,
     "mel_adapter": False,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": False,
   },
   "Log4Net": {
     "structured": False,
@@ -885,6 +908,9 @@ FEATURES = {
     "buffer_pooling": False,
     "zero_deps": False,
     "mel_adapter": True,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": False,
   },
   "ZeroLog": {
     "structured": True,
@@ -906,6 +932,9 @@ FEATURES = {
     "buffer_pooling": True,
     "zero_deps": False,
     "mel_adapter": False,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": "✅ 128 B²",
   },
 }
 

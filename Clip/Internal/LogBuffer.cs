@@ -45,7 +45,9 @@ internal sealed class LogBuffer
     /// appends a marker, so it ships everything up to the last complete element rather
     /// than discarding the whole entry.
     /// No-op once saturated: a caller that just wrote a value which silently dropped
-    /// must not advance the safe point past it.</summary>
+    /// must not advance the safe point past it.
+    /// Inlined: the steady-state cost is one branch and one store, both predictable.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void MarkSafePoint()
     {
         if (!_saturated) _safePoint = _pos;
@@ -53,6 +55,7 @@ internal sealed class LogBuffer
 
     /// <summary>Rewinds <c>_pos</c> to the last <see cref="MarkSafePoint"/>. Call before
     /// emitting a closing marker on a saturated buffer.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RewindToSafePoint() => _pos = _safePoint;
 
     // SIMD-accelerated: chars 0x00-0x1F plus " and \

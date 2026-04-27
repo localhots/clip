@@ -229,6 +229,25 @@ def generate(db: dict) -> str:
 
   lines += [
     "",
+    "**Hardening notes.** *Hardening* here means: when an attacker-controlled"
+    " value (an HTTP header, a deserialized object, anything from outside the"
+    " process) flows through a log call, what does the logger do with it?"
+    " Strip control characters and ANSI escapes from the Console output? Cap"
+    " `InnerException` recursion before it blows the stack? Bound a single"
+    " entry's size before it OOMs the host? Clip is the only logger in this"
+    " set that does all three by default.",
+    "",
+    "¹ NLog's `MaxInnerExceptionLevel` defaults to `0`, which means inner"
+    " exceptions are **not rendered at all** by default — a leftover from NLog"
+    " 1.0 compatibility, not a hardening choice. Set it to a positive value"
+    " to actually see your inner exceptions.",
+    "",
+    "² ZeroLog's per-entry bound is its zero-alloc fixed buffer"
+    " (`LogMessageBufferSize`, default 128 bytes). Argument data exceeding it"
+    " is silently truncated and a `[TRUNCATED]` suffix is appended — this is a"
+    " design constraint, not a security feature. `Exception.ToString()` is"
+    " called at format time and is **not** bounded by it.",
+    "",
     "---",
   ]
 
