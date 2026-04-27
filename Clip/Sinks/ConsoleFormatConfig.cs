@@ -16,6 +16,15 @@ public sealed class ConsoleFormatConfig
     public TimeSpan CachePrecision { get; init; } = TimeSpan.FromMilliseconds(1);
     public bool Colors { get; init; } = true;
 
+    /// <summary>
+    /// When true (default), strips C0 control characters and DEL from user-supplied
+    /// strings (message body, field values, exception data) before writing them, to
+    /// prevent ANSI/terminal-control injection from attacker-influenced log values.
+    /// Tab is always preserved; CR/LF is preserved in messages and stack traces and
+    /// stripped from field values and <see cref="Exception.Data"/> entries.
+    /// </summary>
+    public bool SanitizeControlCharacters { get; init; } = true;
+
     public int MinMessageWidth
     {
         get => _minMessageWidth;

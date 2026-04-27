@@ -18,6 +18,20 @@ internal sealed class LogBuffer
         SearchValues.Create(
             "\"\\\0\u0001\u0002\u0003\u0004\u0005\u0006\a\b\t\n\v\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\e\u001c\u001d\u001e\u001f");
 
+    // C0 controls + DEL minus tab/CR/LF — used to sanitize user-supplied strings in
+    // multiline contexts (message body, exception message, stack trace) before they reach
+    // a terminal. Without this an attacker-controlled value can inject ANSI escapes
+    // (clear screen, rewrite previous line, fake log entries).
+    private static readonly SearchValues<char> ControlCharsMultiline =
+        SearchValues.Create(
+            "\0\a\b\v\f\e");
+
+    // Same as above plus CR and LF — used for single-line contexts like field values and
+    // Exception.Data entries, where a newline would forge a fake log line.
+    private static readonly SearchValues<char> ControlCharsSingleLine =
+        SearchValues.Create(
+            "\0\a\b\n\v\f\r\e");
+
     public ReadOnlySpan<byte> WrittenSpan => _buf.AsSpan(0, _pos);
 
     public void Reset()
@@ -78,6 +92,52 @@ internal sealed class LogBuffer
         }
 
         _pos += Encoding.UTF8.GetBytes(s.AsSpan(), _buf.AsSpan(_pos));
+    }
+
+    /// <summary>
+    /// Writes a UTF-8 encoded string with C0 control characters and DEL stripped.
+    /// When <paramref name="allowMultiline"/> is true, CR and LF are preserved (use this
+    /// for the message body, exception message, and stack trace); otherwise they are
+    /// stripped (use this for field values and Exception.Data, which logically occupy a
+    /// single line — a newline there forges a fake log entry).
+    /// </summary>
+    public void WriteSanitized(string s, bool allowMultiline)
+    {
+        var bad = allowMultiline
+            ? ControlCharsMultiline
+            : ControlCharsSingleLine;
+        var span = s.AsSpan();
+
+        // Fast path: nothing to strip — fall through to the existing WriteString path,
+        // which keeps its scalar ASCII shortcut.
+        var idx = span.IndexOfAny(bad);
+        if (idx < 0)
+        {
+            WriteString(s);
+            return;
+        }
+
+        if (idx > 0) WriteSpan(span[..idx]);
+        span = span[(idx + 1)..];
+        while (span.Length > 0)
+        {
+            idx = span.IndexOfAny(bad);
+            if (idx < 0)
+            {
+                WriteSpan(span);
+                return;
+            }
+
+            if (idx > 0) WriteSpan(span[..idx]);
+            span = span[(idx + 1)..];
+        }
+    }
+
+    private void WriteSpan(ReadOnlySpan<char> s)
+    {
+        var needed = s.Length * 3;
+        if (_pos + needed > _buf.Length) Grow(needed);
+        _pos += Encoding.UTF8.GetBytes(s, _buf.AsSpan(_pos));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

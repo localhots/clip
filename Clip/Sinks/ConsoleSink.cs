@@ -24,6 +24,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
 
     private readonly bool _colors = config.Colors;
     private readonly int _minMessageWidth = config.MinMessageWidth;
+    private readonly bool _sanitize = config.SanitizeControlCharacters;
     private readonly LogBuffer _buffer = new();
     private readonly TimestampCache _tsCache = new(config.TimestampFormat, config.CachePrecision);
     private readonly Lock _lock = new();
@@ -52,7 +53,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
 
             // Message (bold)
             if (_colors) _buffer.WriteBytes("\e[1m"u8);
-            _buffer.WriteString(message);
+            WriteUserText(_buffer, message, allowMultiline: true);
             if (_colors) _buffer.WriteBytes("\e[0m"u8);
 
             // Fields
@@ -120,7 +121,15 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
         }
     }
 
-    private static void WriteFieldValue(LogBuffer buf, in Field f)
+    private void WriteUserText(LogBuffer buf, string s, bool allowMultiline)
+    {
+        if (_sanitize)
+            buf.WriteSanitized(s, allowMultiline);
+        else
+            buf.WriteString(s);
+    }
+
+    private void WriteFieldValue(LogBuffer buf, in Field f)
     {
         switch (f.Type)
         {
@@ -131,23 +140,23 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
             case FieldType.Float: buf.WriteFloat(f.FloatValue); break;
             case FieldType.Double: buf.WriteDouble(f.DoubleValue); break;
             case FieldType.DateTime: buf.WriteDateTime(f.LongValue); break;
-            case FieldType.String: buf.WriteString((string?)f.RefValue ?? "null"); break;
+            case FieldType.String: WriteUserText(buf, (string?)f.RefValue ?? "null", allowMultiline: false); break;
             case FieldType.Decimal: buf.WriteDecimal(f.DecimalValue); break;
             case FieldType.Guid: buf.WriteGuid(f.GuidValue); break;
             case FieldType.Object:
                 if (f.RefValue is IUtf8SpanFormattable fmt)
                     buf.WriteUtf8Formattable(fmt);
                 else
-                    buf.WriteString(f.RefValue?.ToString() ?? "null");
+                    WriteUserText(buf, f.RefValue?.ToString() ?? "null", allowMultiline: false);
                 break;
         }
     }
 
-    private static void WriteException(LogBuffer buf, Exception ex)
+    private void WriteException(LogBuffer buf, Exception ex)
     {
         buf.WriteString(ex.GetType().FullName ?? ex.GetType().Name);
         buf.WriteBytes(": "u8);
-        buf.WriteString(ex.Message);
+        WriteUserText(buf, ex.Message, allowMultiline: true);
 
         if (ex.Data.Count > 0)
         {
@@ -155,9 +164,9 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
             foreach (System.Collections.DictionaryEntry entry in ex.Data)
             {
                 buf.WriteBytes("\n    "u8);
-                buf.WriteString(entry.Key.ToString() ?? "null");
+                WriteUserText(buf, entry.Key.ToString() ?? "null", allowMultiline: false);
                 buf.WriteBytes(" = "u8);
-                buf.WriteString(entry.Value?.ToString() ?? "null");
+                WriteUserText(buf, entry.Value?.ToString() ?? "null", allowMultiline: false);
             }
         }
 
@@ -172,7 +181,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
         if (st != null)
         {
             buf.WriteByte((byte)'\n');
-            buf.WriteString(st);
+            WriteUserText(buf, st, allowMultiline: true);
         }
     }
 
