@@ -87,7 +87,7 @@ logger.Info("Server started", new { Port = 8080, Env = "production" });
 ```
 
 ```
-2024-01-15 09:30:00.123 INFO Server started                           Env=production Port=8080
+2024-01-15 09:30:00.123 INFO Server started                   Env=production Port=8080
 ```
 
 ## Interfaces
@@ -96,7 +96,12 @@ logger.Info("Server started", new { Port = 8080, Env = "production" });
 Fields extracted via compiled expression trees, cached per type.
 
 ```csharp
-logger.Info("Request handled", new { Method = "GET", Path = "/api/users", Status = 200 });
+logger.Info("Request handled", new
+{
+    Method = "GET",
+    Path = "/api/users",
+    Status = 200
+});
 ```
 
 **Zero-alloc** — pass `Field` values directly. Zero heap allocations.
@@ -125,9 +130,9 @@ var logger = Logger.Create(c => c.WriteTo.Console());
 ```
 
 ```
-2024-01-15 09:30:00.123 INFO Starting server                          host=localhost port=8080
-2024-01-15 09:30:00.456 WARN High memory usage                        threshold=80 used=85
-2024-01-15 09:30:01.789 ERRO Connection failed                        host=db.local
+2024-01-15 09:30:00.123 INFO Starting server                  host=localhost port=8080
+2024-01-15 09:30:00.456 WARN High memory usage                threshold=80 used=85
+2024-01-15 09:30:01.789 ERRO Connection failed                host=db.local
 ```
 
 ### JSON
