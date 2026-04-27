@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Clip.Sinks;
 
 /// <summary>
@@ -58,6 +60,12 @@ public sealed class FileSink : ILogSink
         private long _currentSize;
         private string _currentPath;
 
+        // Backoff for reopen attempts after a failure. A retry on every Write would
+        // hammer the error handler with the same file-system error; a small backoff
+        // keeps degraded operation observable without flooding logs.
+        private static readonly long RetryBackoffTicks = Stopwatch.Frequency * 5; // 5 seconds
+        private long _retryAfter;
+
         public RollingFileStream(string path, long maxFileSize, int maxRetainedFiles)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -78,18 +86,39 @@ public sealed class FileSink : ILogSink
 
         public override void Write(ReadOnlySpan<byte> buffer)
         {
-            if (_inner is null)
-                return; // Sink is in a failed state after a Roll() error
+            if (_inner is null && !TryReopen())
+                return;
 
             if (_currentSize + buffer.Length > _maxFileSize && _currentSize > 0)
                 Roll();
 
-            if (_inner is null)
-                return; // Roll failed to reopen
+            if (_inner is null && !TryReopen())
+                return;
 
-            _inner.Write(buffer);
+            _inner!.Write(buffer);
             _inner.Flush();
             _currentSize += buffer.Length;
+        }
+
+        // Returns true if _inner is now open. Throws on the first attempt after a failure
+        // window expires so the operator sees the error via the logger's HandleInternalError;
+        // returns false (silently) during the backoff window so the same error doesn't fire
+        // on every log call.
+        private bool TryReopen()
+        {
+            if (Stopwatch.GetTimestamp() < _retryAfter)
+                return false;
+
+            try
+            {
+                OpenFile();
+                return true;
+            }
+            catch
+            {
+                _retryAfter = Stopwatch.GetTimestamp() + RetryBackoffTicks;
+                throw;
+            }
         }
 
         public override void Write(byte[] buffer, int offset, int count)
@@ -170,7 +199,8 @@ public sealed class FileSink : ILogSink
             }
             catch
             {
-                // _inner remains null — Write will no-op until the next roll attempt
+                _retryAfter = Stopwatch.GetTimestamp() + RetryBackoffTicks;
+                throw;
             }
         }
 

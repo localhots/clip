@@ -435,4 +435,24 @@ public class SinkConfigEdgeCaseTests
         var text = Encoding.UTF8.GetString(ms.ToArray());
         return text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
     }
+
+    //
+    // NullSink — no-op sink used for benchmarks and discarding output
+    //
+
+    [Fact]
+    public void NullSink_AcceptsAllInput_DoesNotThrow()
+    {
+        using var sink = new NullSink();
+        var ex = Record.Exception(() =>
+        {
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "hello",
+                [new Field("k", "v")], null);
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Error, "oops",
+                ReadOnlySpan<Field>.Empty, new InvalidOperationException("ignored"));
+            sink.Dispose();
+            sink.Dispose(); // idempotent
+        });
+        Assert.Null(ex);
+    }
 }

@@ -194,4 +194,32 @@ public class EnricherTests
             target.Add(new Field("SeqNo", Interlocked.Increment(ref _counter)));
         }
     }
+
+    //
+    // Typed Enrich.Field overloads — verifies each public typed shortcut wires through correctly
+    //
+
+    [Fact]
+    public void EnrichField_TypedOverloads_AllEmitCorrectFieldType()
+    {
+        var guid = Guid.NewGuid();
+        var (logger, ms) = MakeLogger(c => c
+            .Enrich.Field("S", "str")
+            .Enrich.Field("I", 1)
+            .Enrich.Field("L", 2L)
+            .Enrich.Field("B", true)
+            .Enrich.Field("D", 3.14)
+            .Enrich.Field("M", 9.99m)
+            .Enrich.Field("G", guid));
+        logger.Info("hello");
+
+        var fields = GetFields(ReadLines(ms)[0]);
+        Assert.Equal("str", fields.GetProperty("S").GetString());
+        Assert.Equal(1, fields.GetProperty("I").GetInt32());
+        Assert.Equal(2L, fields.GetProperty("L").GetInt64());
+        Assert.True(fields.GetProperty("B").GetBoolean());
+        Assert.Equal(3.14, fields.GetProperty("D").GetDouble());
+        Assert.Equal(9.99m, fields.GetProperty("M").GetDecimal());
+        Assert.Equal(guid.ToString(), fields.GetProperty("G").GetString());
+    }
 }

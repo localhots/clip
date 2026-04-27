@@ -16,7 +16,13 @@ internal sealed class GrpcExporter : IExporter
 
     internal GrpcExporter(OtlpSinkOptions options)
     {
-        var channelOptions = new GrpcChannelOptions();
+        // Explicit cap (vs. the implicit 4 MB Grpc.Net.Client default) — an
+        // ExportLogsServiceResponse is tiny, so any larger payload signals a
+        // malicious or compromised collector and should fail fast.
+        var channelOptions = new GrpcChannelOptions
+        {
+            MaxReceiveMessageSize = 1 * 1024 * 1024,
+        };
         if (options.Endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
             channelOptions.Credentials = ChannelCredentials.Insecure;
         _channel = GrpcChannel.ForAddress(options.Endpoint, channelOptions);

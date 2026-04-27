@@ -24,7 +24,9 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
 
     private readonly bool _colors = config.Colors;
     private readonly int _minMessageWidth = config.MinMessageWidth;
-    private readonly LogBuffer _buffer = new();
+    private readonly bool _sanitize = config.SanitizeControlCharacters;
+    private readonly int _maxInnerExceptionDepth = config.MaxInnerExceptionDepth;
+    private readonly LogBuffer _buffer = new(config.MaxLogEntryBytes);
     private readonly TimestampCache _tsCache = new(config.TimestampFormat, config.CachePrecision);
     private readonly Lock _lock = new();
 
@@ -52,8 +54,12 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
 
             // Message (bold)
             if (_colors) _buffer.WriteBytes("\e[1m"u8);
-            _buffer.WriteString(message);
+            WriteUserText(_buffer, message, allowMultiline: true);
             if (_colors) _buffer.WriteBytes("\e[0m"u8);
+            // Mark each completed section so a saturation later in the entry still
+            // ships everything up to the previous boundary. MarkSafePoint is a no-op
+            // once saturated, so a partial section can never advance the safe point.
+            _buffer.MarkSafePoint();
 
             // Fields
             if (fields.Length > 0)
@@ -62,6 +68,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
                 if (pad > 0) _buffer.WritePadding(pad);
                 _buffer.WriteBytes("  "u8);
                 WriteFieldsSorted(_buffer, level, fields);
+                _buffer.MarkSafePoint();
             }
 
             // Exception
@@ -70,9 +77,20 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
                 _buffer.WriteByte((byte)'\n');
                 _buffer.WriteBytes("  "u8);
                 WriteException(_buffer, exception);
+                _buffer.MarkSafePoint();
             }
 
             _buffer.WriteByte((byte)'\n');
+
+            // If any write hit the size cap, append `<truncated>\n` to the partial line.
+            // Console output is plain text — mid-line truncation is readable, no rewind
+            // of content needed, just a clean termination.
+            if (_buffer.Saturated)
+            {
+                _buffer.RewindToSafePoint();
+                _buffer.WriteMarker(" <truncated>\n"u8);
+            }
+
             _output.Write(_buffer.WrittenSpan);
         }
     }
@@ -117,10 +135,19 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
             }
 
             WriteFieldValue(buf, in f);
+            buf.MarkSafePoint();
         }
     }
 
-    private static void WriteFieldValue(LogBuffer buf, in Field f)
+    private void WriteUserText(LogBuffer buf, string s, bool allowMultiline)
+    {
+        if (_sanitize)
+            buf.WriteSanitized(s, allowMultiline);
+        else
+            buf.WriteString(s);
+    }
+
+    private void WriteFieldValue(LogBuffer buf, in Field f)
     {
         switch (f.Type)
         {
@@ -131,23 +158,23 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
             case FieldType.Float: buf.WriteFloat(f.FloatValue); break;
             case FieldType.Double: buf.WriteDouble(f.DoubleValue); break;
             case FieldType.DateTime: buf.WriteDateTime(f.LongValue); break;
-            case FieldType.String: buf.WriteString((string?)f.RefValue ?? "null"); break;
+            case FieldType.String: WriteUserText(buf, (string?)f.RefValue ?? "null", allowMultiline: false); break;
             case FieldType.Decimal: buf.WriteDecimal(f.DecimalValue); break;
             case FieldType.Guid: buf.WriteGuid(f.GuidValue); break;
             case FieldType.Object:
                 if (f.RefValue is IUtf8SpanFormattable fmt)
                     buf.WriteUtf8Formattable(fmt);
                 else
-                    buf.WriteString(f.RefValue?.ToString() ?? "null");
+                    WriteUserText(buf, f.RefValue?.ToString() ?? "null", allowMultiline: false);
                 break;
         }
     }
 
-    private static void WriteException(LogBuffer buf, Exception ex)
+    private void WriteException(LogBuffer buf, Exception ex, int depth = 0)
     {
         buf.WriteString(ex.GetType().FullName ?? ex.GetType().Name);
         buf.WriteBytes(": "u8);
-        buf.WriteString(ex.Message);
+        WriteUserText(buf, ex.Message, allowMultiline: true);
 
         if (ex.Data.Count > 0)
         {
@@ -155,24 +182,29 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
             foreach (System.Collections.DictionaryEntry entry in ex.Data)
             {
                 buf.WriteBytes("\n    "u8);
-                buf.WriteString(entry.Key.ToString() ?? "null");
+                WriteUserText(buf, entry.Key.ToString() ?? "null", allowMultiline: false);
                 buf.WriteBytes(" = "u8);
-                buf.WriteString(entry.Value?.ToString() ?? "null");
+                WriteUserText(buf, entry.Value?.ToString() ?? "null", allowMultiline: false);
             }
         }
 
         if (ex.InnerException != null)
         {
-            buf.WriteBytes("\n ---> "u8);
-            WriteException(buf, ex.InnerException);
-            buf.WriteBytes("\n   --- End of inner exception stack trace ---"u8);
+            if (depth + 1 >= _maxInnerExceptionDepth)
+                buf.WriteBytes("\n ---> ... (inner exceptions truncated)"u8);
+            else
+            {
+                buf.WriteBytes("\n ---> "u8);
+                WriteException(buf, ex.InnerException, depth + 1);
+                buf.WriteBytes("\n   --- End of inner exception stack trace ---"u8);
+            }
         }
 
         var st = ex.StackTrace;
         if (st != null)
         {
             buf.WriteByte((byte)'\n');
-            buf.WriteString(st);
+            WriteUserText(buf, st, allowMultiline: true);
         }
     }
 

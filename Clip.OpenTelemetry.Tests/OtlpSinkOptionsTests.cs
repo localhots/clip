@@ -100,4 +100,43 @@ public class OtlpSinkOptionsTests
             Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", null);
         }
     }
+
+    [Theory]
+    [InlineData("Authorization=Bearer tok\r\nX-Injected: yes")]
+    [InlineData("Authorization=Bearer tok\nX-Injected: yes")]
+    [InlineData("X-Bad\r\nKey=value")]
+    public void ApplyEnvironment_RejectsHeadersWithCrLf(string headerValue)
+    {
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS", headerValue);
+        try
+        {
+            var opts = new OtlpSinkOptions();
+            opts.ApplyEnvironment();
+            Assert.DoesNotContain(opts.Headers, kv =>
+                kv.Key.Contains('\r') || kv.Key.Contains('\n') ||
+                kv.Value.Contains('\r') || kv.Value.Contains('\n'));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS", null);
+        }
+    }
+
+    [Fact]
+    public void ApplyEnvironment_RejectsResourceAttributesWithCrLf()
+    {
+        Environment.SetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES", "deployment=prod\r\nevil=injected");
+        try
+        {
+            var opts = new OtlpSinkOptions();
+            opts.ApplyEnvironment();
+            Assert.DoesNotContain(opts.ResourceAttributes, kv =>
+                kv.Key.Contains('\r') || kv.Key.Contains('\n') ||
+                kv.Value.Contains('\r') || kv.Value.Contains('\n'));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES", null);
+        }
+    }
 }

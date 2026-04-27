@@ -14,7 +14,11 @@ internal sealed class TimestampCache(string format, TimeSpan precision)
     public void WriteTo(LogBuffer buffer, DateTimeOffset timestamp)
     {
         var ticks = timestamp.UtcTicks;
-        if (_cachedLen > 0 && (ticks - _lastTicks) < _precisionTicks)
+        // The lower bound `ticks >= _lastTicks` keeps a backwards clock step (NTP
+        // correction, manual time change) from reusing a stale cached value: signed
+        // subtraction would yield a negative delta that compares less than
+        // _precisionTicks and silently keep the now-newer cached timestamp.
+        if (_cachedLen > 0 && ticks >= _lastTicks && (ticks - _lastTicks) < _precisionTicks)
         {
             buffer.WriteBytes(_cached.AsSpan(0, _cachedLen));
             return;

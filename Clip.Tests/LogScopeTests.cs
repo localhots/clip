@@ -60,6 +60,69 @@ public class LogScopeTests
     }
 
     [Fact]
+    public async Task AsyncLocal_PreservedAcrossTaskRun()
+    {
+        // ExecutionContext flows into Task.Run, so the context pushed on the calling thread
+        // must be visible inside the continuation.
+        using (LogScope.Push([new Field("requestId", "abc")]))
+        {
+            var captured = await Task.Run(() =>
+            {
+                var list = new List<Field>();
+                LogScope.CopyCurrentTo(list);
+                return list;
+            });
+
+            Assert.Single(captured);
+            Assert.Equal("requestId", captured[0].Key);
+        }
+    }
+
+    [Fact]
+    public async Task AsyncLocal_NotLeakedToUnrelatedTask()
+    {
+        // A Task.Run started from a parent ExecutionContext that has no scope must not
+        // see scopes set in a sibling Task.Run.
+        var sibling = Task.Run(async () =>
+        {
+            using (LogScope.Push([new Field("sibling-only", 1)]))
+                await Task.Delay(50);
+        });
+
+        // This task runs concurrently with `sibling`. It must not see "sibling-only".
+        var observed = await Task.Run(() =>
+        {
+            var list = new List<Field>();
+            LogScope.CopyCurrentTo(list);
+            return list;
+        });
+
+        await sibling;
+        Assert.DoesNotContain(observed, f => f.Key == "sibling-only");
+    }
+
+    [Fact]
+    public async Task AsyncLocal_NestedAcrossAwait_RestoresOuter()
+    {
+        using (LogScope.Push([new Field("outer", 1)]))
+        {
+            await Task.Yield();
+            using (LogScope.Push([new Field("inner", 2)]))
+            {
+                await Task.Yield();
+                var both = new List<Field>();
+                LogScope.CopyCurrentTo(both);
+                Assert.Equal(2, both.Count);
+            }
+
+            var afterInner = new List<Field>();
+            LogScope.CopyCurrentTo(afterInner);
+            Assert.Single(afterInner);
+            Assert.Equal("outer", afterInner[0].Key);
+        }
+    }
+
+    [Fact]
     public void Dispose_RestoresPreviousContext()
     {
         using (LogScope.Push([new Field("outer", 1)]))
