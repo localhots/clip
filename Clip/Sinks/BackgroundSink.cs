@@ -25,6 +25,7 @@ public sealed class BackgroundSink(ILogSink inner, int capacity = 1024) : ILogSi
     internal void SetErrorHandler(Action<Exception>? handler) => _onError = handler;
 
     private readonly Task _drainTask = Task.CompletedTask; // Safe default; overwritten by chained ctor
+    private bool _disposed;
 
     // Dummy bool parameter disambiguate from the primary constructor so Create()
     // can chain to it and start the drain loop after _channel is initialized.
@@ -88,14 +89,21 @@ public sealed class BackgroundSink(ILogSink inner, int capacity = 1024) : ILogSi
 
     public void Dispose()
     {
-        _channel.Writer.Complete();
-        // Give the drain loop time to finish, but don't block forever
-        if (!_drainTask.Wait(TimeSpan.FromSeconds(5)))
-        {
-            // Drain timed out — inner sink may be stuck. Proceed with disposal.
-        }
+        // Idempotent: skip everything on second call so we don't double-dispose a custom
+        // inner sink whose Dispose isn't safe to call twice.
+        if (_disposed) return;
+        _disposed = true;
 
-        inner.Dispose();
+        // TryComplete (vs Complete) so a double-Dispose doesn't fault even before the
+        // _disposed guard — second call sees the channel already completed and returns false.
+        _channel.Writer.TryComplete();
+
+        // If the drain finished, dispose the inner sink. If it didn't, the drain task is
+        // still inside inner.Write and disposing now would race (FileStream freed mid-write,
+        // half-formed JSON line on disk). Leak the inner sink instead — better an orphaned
+        // file handle than corrupted output.
+        if (_drainTask.Wait(TimeSpan.FromSeconds(5)))
+            inner.Dispose();
     }
 
     private readonly record struct LogEntry(

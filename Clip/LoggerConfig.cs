@@ -27,6 +27,8 @@ public sealed class LoggerConfig
 
     internal Action<Exception>? InternalErrorHandler { get; private set; }
 
+    internal TimeSpan FatalFlushTimeoutValue { get; private set; } = TimeSpan.FromSeconds(2);
+
     /// <summary>Configures where log entries are written.</summary>
     public SinkConfig WriteTo { get; }
 
@@ -77,6 +79,21 @@ public sealed class LoggerConfig
     public LoggerConfig OnInternalError(Action<Exception>? handler)
     {
         InternalErrorHandler = handler;
+        return this;
+    }
+
+    /// <summary>
+    /// Total time <see cref="Logger.Fatal"/> will wait for sinks to flush before calling
+    /// <c>Environment.Exit</c>. Each async sink (<c>Background</c>, OTLP) has its own
+    /// internal Dispose timeout; this is an additional cap so a hung collector or
+    /// stuck inner sink can't delay process exit indefinitely. Defaults to 2 seconds.
+    /// Set to <see cref="TimeSpan.Zero"/> to skip flushing entirely on Fatal.
+    /// </summary>
+    /// <param name="timeout">The maximum time to wait for sinks to flush.</param>
+    public LoggerConfig FatalFlushTimeout(TimeSpan timeout)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(timeout, TimeSpan.Zero);
+        FatalFlushTimeoutValue = timeout;
         return this;
     }
 }

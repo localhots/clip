@@ -125,6 +125,25 @@ public class BackgroundSinkTests
     }
 
     [Fact]
+    public void BackgroundSink_DoubleDispose_DoesNotInvokeErrorCallback()
+    {
+        // Logger.Dispose called twice would hit Complete()-throws on the second pass and
+        // surface as a spurious _onInternalError. TryComplete is idempotent.
+        var errors = new List<Exception>();
+        var ms = new MemoryStream();
+        var logger = Logger.Create(c => c
+            .MinimumLevel(LogLevel.Trace)
+            .OnInternalError(errors.Add)
+            .WriteTo.Background(b => b.Json(ms)));
+
+        logger.Info("once");
+        logger.Dispose();
+        logger.Dispose(); // must not surface an error
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
     public void BackgroundSink_DisposeWithoutWrites_DoesNotHang()
     {
         var ms = new MemoryStream();

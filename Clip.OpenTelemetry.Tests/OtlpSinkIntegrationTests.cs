@@ -243,6 +243,25 @@ public class OtlpSinkIntegrationTests
     }
 
     [Fact]
+    public void DoubleDispose_DoesNotThrow()
+    {
+        // Calling Dispose twice on OtlpSink must be idempotent — a second _cts.Cancel()
+        // after _cts.Dispose() throws ObjectDisposedException, which would surface as a
+        // spurious internal-error callback.
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        var sink = new OtlpSink(options, exporter);
+        sink.Dispose();
+        var ex = Record.Exception(() => sink.Dispose());
+        Assert.Null(ex);
+    }
+
+    [Fact]
     public async Task TraceContext_CapturedFromActivity()
     {
         var exporter = new CapturingExporter();

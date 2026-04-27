@@ -41,8 +41,14 @@ CATEGORY_TITLES = {
 }
 
 CATEGORY_ORDER = [
-  "NoFields", "FiveFields", "WithContext", "WithException",
-  "Enriched", "FieldFiltered", "Redacted", "FullPipeline",
+  "NoFields",
+  "FiveFields",
+  "WithContext",
+  "WithException",
+  "Enriched",
+  "FieldFiltered",
+  "Redacted",
+  "FullPipeline",
 ]
 
 CLIP_NAMES = {"Clip", "ClipZero", "ClipMEL"}
@@ -286,7 +292,7 @@ def generate(db: dict) -> str:
     "",
     "⁵ MEL's `Logger.Log` calls every registered provider, then collects"
     " any thrown exceptions and rethrows as `AggregateException` with the"
-    " message `\"An error occurred while writing to logger(s).\"` — so the"
+    ' message `"An error occurred while writing to logger(s)."` — so the'
     " other providers do receive the event, but the application-side log"
     " call does not return cleanly. Source:"
     " [`Logger.cs`](https://github.com/dotnet/runtime/blob/main/src/libraries/Microsoft.Extensions.Logging/src/Logger.cs).",

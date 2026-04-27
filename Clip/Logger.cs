@@ -19,6 +19,7 @@ public sealed class Logger : ILogger, IZeroLogger
     private readonly ILogRedactor[]? _redactors;
     private readonly ILogFilter[]? _filters;
     private readonly Action<Exception>? _onInternalError;
+    private readonly TimeSpan _fatalFlushTimeout;
 
     // Per-thread reentry guard. A log call made from inside a sink, enricher, filter,
     // or redactor (e.g. via a property's ToString that itself logs) returns silently
@@ -38,7 +39,7 @@ public sealed class Logger : ILogger, IZeroLogger
     }
 
     private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors,
-        ILogFilter[]? filters, Action<Exception>? onInternalError)
+        ILogFilter[]? filters, Action<Exception>? onInternalError, TimeSpan fatalFlushTimeout)
     {
         MinLevel = minLevel;
         _sinks = sinks;
@@ -46,6 +47,7 @@ public sealed class Logger : ILogger, IZeroLogger
         _redactors = redactors;
         _filters = filters;
         _onInternalError = onInternalError;
+        _fatalFlushTimeout = fatalFlushTimeout;
     }
 
     /// <summary>
@@ -80,7 +82,7 @@ public sealed class Logger : ILogger, IZeroLogger
             sinks[i] = new SinkEntry(raw[i].Sink, raw[i].MinLevel, raw[i].Enrichers);
         }
         return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build(),
-            config.Filter.Build(), onError);
+            config.Filter.Build(), onError, config.FatalFlushTimeoutValue);
     }
 
     private void HandleInternalError(Exception ex)
@@ -199,7 +201,11 @@ public sealed class Logger : ILogger, IZeroLogger
             FieldListPool.Return(list);
         }
 
-        Dispose(); // Flush sinks
+        // Bounded flush: a hung sink (unreachable OTLP collector, stuck file system)
+        // can't delay process exit past _fatalFlushTimeout. Each sink's own Dispose
+        // timeout is its inner cap; this is the outer cap across all of them.
+        if (_fatalFlushTimeout > TimeSpan.Zero)
+            Task.Run(Dispose).Wait(_fatalFlushTimeout);
         Environment.Exit(1);
     }
 

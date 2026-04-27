@@ -169,7 +169,7 @@ DESCRIPTIONS = {
     ),
     "code": (
       "// Clip\n"
-      'var logger = Logger.Create(c => c\n'
+      "var logger = Logger.Create(c => c\n"
       '    .Enrich.Field("app", "benchmark")\n'
       "    .WriteTo.Console());\n"
       'logger.Info("Request handled", new { Method, Status, Elapsed });'
@@ -182,7 +182,7 @@ DESCRIPTIONS = {
     ),
     "code": (
       "// Clip\n"
-      'var logger = Logger.Create(c => c\n'
+      "var logger = Logger.Create(c => c\n"
       '    .Filter.Fields("password")\n'
       "    .WriteTo.Console());\n"
       'logger.Info("Request handled", new { Method, Status, password = "secret" });'
@@ -195,7 +195,7 @@ DESCRIPTIONS = {
     ),
     "code": (
       "// Clip\n"
-      'var logger = Logger.Create(c => c\n'
+      "var logger = Logger.Create(c => c\n"
       '    .Redact.Fields("Token")\n'
       "    .WriteTo.Console());\n"
       'logger.Info("Request handled", new { Method, Status, Token = "bearer-abc" });'
@@ -207,7 +207,7 @@ DESCRIPTIONS = {
       " filter removes `password`, redactor replaces `Token` with `***`."
     ),
     "code": (
-      'var logger = Logger.Create(c => c\n'
+      "var logger = Logger.Create(c => c\n"
       '    .Enrich.Field("app", "benchmark")\n'
       '    .Filter.Fields("password")\n'
       '    .Redact.Fields("Token")\n'
@@ -810,7 +810,7 @@ CAVEATS = {
     {
       "logger": "Clip",
       "text": (
-        "Enricher configured via `.Enrich.Field(\"app\", \"benchmark\")`."
+        'Enricher configured via `.Enrich.Field("app", "benchmark")`.'
         " The field is added to the internal field list on every call."
         " Enricher fields have the lowest priority — call-site and"
         " context fields override them on key collision."
@@ -819,7 +819,7 @@ CAVEATS = {
     {
       "logger": "Serilog",
       "text": (
-        "Enricher configured via `.Enrich.WithProperty(\"app\", \"benchmark\")`."
+        'Enricher configured via `.Enrich.WithProperty("app", "benchmark")`.'
         " The property is added to every `LogEvent` object at construction"
         " time. No level gating — the enricher runs on every enabled call."
       ),
@@ -840,7 +840,7 @@ CAVEATS = {
     {
       "logger": "Clip",
       "text": (
-        "Filter configured via `.Filter.Fields(\"password\")`."
+        'Filter configured via `.Filter.Fields("password")`.'
         " Each field key is checked against a hash set. Filtered"
         " fields never reach redactors or sinks."
       ),
@@ -861,7 +861,7 @@ CAVEATS = {
     {
       "logger": "Clip",
       "text": (
-        "Redactor configured via `.Redact.Fields(\"Token\")`."
+        'Redactor configured via `.Redact.Fields("Token")`.'
         " Each field is checked by key (case-insensitive) and"
         " matching values are replaced with `***`. Runs after"
         " filtering — filtered fields are never redacted."
