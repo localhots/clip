@@ -25,6 +25,14 @@ public sealed class ConsoleFormatConfig
     /// </summary>
     public bool SanitizeControlCharacters { get; init; } = true;
 
+    /// <summary>
+    /// Maximum <see cref="Exception.InnerException"/> chain depth to render. Beyond this,
+    /// a truncation sentinel is emitted instead of recursing. Caps stack usage on
+    /// pathologically deep chains (which are easy to construct from deserialized data).
+    /// Default 32.
+    /// </summary>
+    public int MaxInnerExceptionDepth { get; init; } = 32;
+
     public int MinMessageWidth
     {
         get => _minMessageWidth;

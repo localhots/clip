@@ -21,6 +21,7 @@ public sealed class JsonSink : ILogSink
     private readonly byte[] _msgPrefix;
     private readonly byte[]? _fieldsPrefix;
     private readonly byte[] _errorPrefix;
+    private readonly int _maxInnerExceptionDepth;
 
     public JsonSink(JsonFormatConfig config, Stream? output = null)
     {
@@ -44,6 +45,7 @@ public sealed class JsonSink : ILogSink
             ? Encoding.UTF8.GetBytes($",\"{esc(config.FieldsKey)}\":{{")
             : null;
         _errorPrefix = Encoding.UTF8.GetBytes($",\"{esc(config.ErrorKey)}\":");
+        _maxInnerExceptionDepth = config.MaxInnerExceptionDepth;
     }
 
     public JsonSink(Stream? output = null)
@@ -134,7 +136,7 @@ public sealed class JsonSink : ILogSink
         }
     }
 
-    private static void WriteException(LogBuffer buf, Exception ex)
+    private void WriteException(LogBuffer buf, Exception ex, int depth = 0)
     {
         buf.WriteBytes("{\"type\":"u8);
         buf.WriteJsonString(ex.GetType().FullName ?? ex.GetType().Name);
@@ -167,7 +169,10 @@ public sealed class JsonSink : ILogSink
         if (ex.InnerException != null)
         {
             buf.WriteBytes(",\"inner\":"u8);
-            WriteException(buf, ex.InnerException);
+            if (depth + 1 >= _maxInnerExceptionDepth)
+                buf.WriteBytes("{\"truncated\":true}"u8);
+            else
+                WriteException(buf, ex.InnerException, depth + 1);
         }
 
         buf.WriteByte((byte)'}');

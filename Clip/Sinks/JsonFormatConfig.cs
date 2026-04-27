@@ -19,6 +19,13 @@ public sealed class JsonFormatConfig
     public string? FieldsKey { get; init; }
     public string ErrorKey { get; init; } = "error";
 
+    /// <summary>
+    /// Maximum <see cref="Exception.InnerException"/> chain depth to render. Beyond this,
+    /// a truncation sentinel (<c>{"truncated":true}</c>) is emitted instead of recursing.
+    /// Caps stack usage on pathologically deep chains. Default 32.
+    /// </summary>
+    public int MaxInnerExceptionDepth { get; init; } = 32;
+
     public IReadOnlyList<string> LevelLabels
     {
         get => _levelLabels;

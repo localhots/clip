@@ -25,6 +25,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
     private readonly bool _colors = config.Colors;
     private readonly int _minMessageWidth = config.MinMessageWidth;
     private readonly bool _sanitize = config.SanitizeControlCharacters;
+    private readonly int _maxInnerExceptionDepth = config.MaxInnerExceptionDepth;
     private readonly LogBuffer _buffer = new();
     private readonly TimestampCache _tsCache = new(config.TimestampFormat, config.CachePrecision);
     private readonly Lock _lock = new();
@@ -152,7 +153,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
         }
     }
 
-    private void WriteException(LogBuffer buf, Exception ex)
+    private void WriteException(LogBuffer buf, Exception ex, int depth = 0)
     {
         buf.WriteString(ex.GetType().FullName ?? ex.GetType().Name);
         buf.WriteBytes(": "u8);
@@ -172,9 +173,14 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
 
         if (ex.InnerException != null)
         {
-            buf.WriteBytes("\n ---> "u8);
-            WriteException(buf, ex.InnerException);
-            buf.WriteBytes("\n   --- End of inner exception stack trace ---"u8);
+            if (depth + 1 >= _maxInnerExceptionDepth)
+                buf.WriteBytes("\n ---> ... (inner exceptions truncated)"u8);
+            else
+            {
+                buf.WriteBytes("\n ---> "u8);
+                WriteException(buf, ex.InnerException, depth + 1);
+                buf.WriteBytes("\n   --- End of inner exception stack trace ---"u8);
+            }
         }
 
         var st = ex.StackTrace;
