@@ -153,6 +153,52 @@ public class InvalidFieldsArgumentAnalyzerTests
     }
 
     [Fact]
+    public async Task MethodCall_ReturningPrimitive_Diagnostic()
+    {
+        const string test = """
+                            using Clip;
+                            class C {
+                                int GetCount() => 42;
+                                void M(ILogger logger) {
+                                    logger.Info("msg", {|#0:GetCount()|});
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test,
+            Verify.Diagnostic(DiagnosticIds.InvalidFieldsArgument).WithLocation(0).WithArguments("int"));
+    }
+
+    [Fact]
+    public async Task TernaryExpression_BothBranchesString_Diagnostic()
+    {
+        const string test = """
+                            using Clip;
+                            class C {
+                                void M(ILogger logger, bool flag) {
+                                    logger.Info("msg", {|#0:flag ? "yes" : "no"|});
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test,
+            Verify.Diagnostic(DiagnosticIds.InvalidFieldsArgument).WithLocation(0).WithArguments("string"));
+    }
+
+    [Fact]
+    public async Task ArrayIndexer_PrimitiveElement_Diagnostic()
+    {
+        const string test = """
+                            using Clip;
+                            class C {
+                                void M(ILogger logger, int[] arr) {
+                                    logger.Info("msg", {|#0:arr[0]|});
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test,
+            Verify.Diagnostic(DiagnosticIds.InvalidFieldsArgument).WithLocation(0).WithArguments("int"));
+    }
+
+    [Fact]
     public async Task ErrorWithException_NoDiagnostic()
     {
         const string test = """

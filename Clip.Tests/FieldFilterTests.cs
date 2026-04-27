@@ -259,4 +259,35 @@ public class FieldFilterTests
     {
         public bool ShouldSkip(string key) => key.StartsWith(prefix, StringComparison.Ordinal);
     }
+
+    //
+    // FieldPatternFilter direct construction
+    //
+
+    [Fact]
+    public void FilterPattern_PrecompiledRegex_AppliedCorrectly()
+    {
+        // Exercises the FieldPatternFilter(Regex) constructor (the string overload is
+        // implicitly used by Filter.Pattern(string)).
+        var regex = new System.Text.RegularExpressions.Regex(@"^trace_",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+        var (logger, ms) = MakeLogger(c => c.Filter.Pattern(regex));
+        logger.Info("test", new Field("trace_id", "x"), new Field("user", "alice"));
+
+        var fields = GetFields(ReadLines(ms)[0]);
+        Assert.Throws<KeyNotFoundException>(() => fields.GetProperty("trace_id"));
+        Assert.Equal("alice", fields.GetProperty("user").GetString());
+    }
+
+    [Fact]
+    public void FilterPattern_RegexTimeout_TreatedAsNoSkip()
+    {
+        // Catastrophic backtracking on key-matching: the catch path returns false
+        // (don't skip) — fields make it through rather than being silently dropped.
+        var (logger, ms) = MakeLogger(c => c.Filter.Pattern(@"(a+)+b"));
+        logger.Info("test", new Field(new string('a', 25) + "c", "value"));
+
+        var docs = ReadLines(ms);
+        Assert.Single(docs);
+    }
 }

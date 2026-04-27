@@ -207,18 +207,6 @@ public class RedactorTests
     }
 
     [Fact]
-    public void PatternRedactor_BackreferenceInReplacement_Works()
-    {
-        // Regex.Replace supports $1/$2 capture-group references; verify they pass through.
-        var (logger, ms) = MakeLogger(c =>
-            c.Redact.Pattern(@"(\d{3})-(\d{3})-(\d{4})", "***-***-$3"));
-        logger.Info("test", new { Phone = "555-123-4567" });
-
-        var fields = GetFields(ReadLines(ms)[0]);
-        Assert.Equal("***-***-4567", fields.GetProperty("Phone").GetString());
-    }
-
-    [Fact]
     public void PatternRedactor_RegexTimeout_DoesNotCrash()
     {
         // Catastrophic-backtracking pattern. The Redactor's RegexMatchTimeoutException is

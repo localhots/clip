@@ -89,4 +89,50 @@ public class MessageTemplateSyntaxAnalyzerTests
                             """;
         await Verify.VerifyAnalyzerAsync(test);
     }
+
+    [Fact]
+    public async Task EmptyBraces_NoDiagnostic()
+    {
+        // {} has no identifier — must not match the placeholder pattern.
+        const string test = """
+                            using Clip;
+                            class C {
+                                void M(ILogger logger) {
+                                    logger.Info("Curly braces: {}");
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test);
+    }
+
+    [Fact]
+    public async Task LoneOpenBrace_NoDiagnostic()
+    {
+        // Unmatched `{` with no closing brace must not be flagged.
+        const string test = """
+                            using Clip;
+                            class C {
+                                void M(ILogger logger) {
+                                    logger.Info("Trailing brace: {prefix");
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test);
+    }
+
+    [Fact]
+    public async Task EscapedBracesAroundIdentifier_NoDiagnostic()
+    {
+        // `{{x}}` is the C# composite-format escape — renders as literal `{x}` and is not
+        // a template placeholder. The regex's negative lookarounds must reject it.
+        const string test = """
+                            using Clip;
+                            class C {
+                                void M(ILogger logger) {
+                                    logger.Info("Escaped: {{x}}");
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test);
+    }
 }

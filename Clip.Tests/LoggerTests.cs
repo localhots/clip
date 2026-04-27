@@ -451,4 +451,140 @@ public class LoggerTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => config.FatalFlushTimeout(TimeSpan.FromMilliseconds(-1)));
     }
+
+    //
+    // Ergonomic overloads (object? fields) — the zero-alloc overload normally wins
+    // overload resolution via [OverloadResolutionPriority(1)], so the ergonomic body
+    // is only exercised when the caller actually passes an object? fields argument.
+    //
+
+    [Fact]
+    public void Trace_ErgonomicTier_WithObjectFields_ExtractsProperties()
+    {
+        var (logger, ms) = MakeJsonLogger();
+        logger.Trace("traced", new { K = 1 });
+        var fields = ReadLines(ms)[0].RootElement.GetProperty("fields");
+        Assert.Equal(1, fields.GetProperty("K").GetInt32());
+    }
+
+    [Fact]
+    public void Debug_ErgonomicTier_WithObjectFields_ExtractsProperties()
+    {
+        var (logger, ms) = MakeJsonLogger();
+        logger.Debug("dbg", new { K = 2 });
+        var fields = ReadLines(ms)[0].RootElement.GetProperty("fields");
+        Assert.Equal(2, fields.GetProperty("K").GetInt32());
+    }
+
+    [Fact]
+    public void Error_ErgonomicTier_WithObjectFields_ExtractsProperties()
+    {
+        var (logger, ms) = MakeJsonLogger();
+        logger.Error("err", new { K = 3 });
+        var fields = ReadLines(ms)[0].RootElement.GetProperty("fields");
+        Assert.Equal(3, fields.GetProperty("K").GetInt32());
+    }
+
+    [Fact]
+    public void Error_ErgonomicTier_WithExceptionAndFields_BothEmitted()
+    {
+        var (logger, ms) = MakeJsonLogger();
+        logger.Error("err", new InvalidOperationException("boom"), new { K = 4 });
+        var doc = ReadLines(ms)[0].RootElement;
+        Assert.Equal("boom", doc.GetProperty("error").GetProperty("msg").GetString());
+        Assert.Equal(4, doc.GetProperty("fields").GetProperty("K").GetInt32());
+    }
+
+    //
+    // Interface-explicit AddContext — exercised only via interface typing
+    //
+
+    [Fact]
+    public void AddContext_ViaILoggerInterface_PushesContext()
+    {
+        var (logger, ms) = MakeJsonLogger();
+        ILogger asInterface = logger;
+        using (asInterface.AddContext(new { ScopedKey = "v" }))
+            asInterface.Info("scoped");
+        var fields = ReadLines(ms)[0].RootElement.GetProperty("fields");
+        Assert.Equal("v", fields.GetProperty("ScopedKey").GetString());
+    }
+
+    [Fact]
+    public void AddContext_ViaIZeroLoggerInterface_PushesContext()
+    {
+        var (logger, ms) = MakeJsonLogger();
+        IZeroLogger asInterface = logger;
+        using (asInterface.AddContext(new Field("ScopedKey", "v")))
+            asInterface.Info("scoped");
+        var fields = ReadLines(ms)[0].RootElement.GetProperty("fields");
+        Assert.Equal("v", fields.GetProperty("ScopedKey").GetString());
+    }
+
+    //
+    // Per-sink enricher that throws — covers WriteWithEnrichers catch path
+    //
+
+    [Fact]
+    public void PerSinkEnricher_Throws_HandlerInvoked_OtherFieldsStillEmitted()
+    {
+        var captured = new List<Exception>();
+        var ms = new MemoryStream();
+        using var logger = Logger.Create(c => c
+            .OnInternalError(captured.Add)
+            .MinimumLevel(LogLevel.Trace)
+            .WriteTo.Enriched(
+                e => e.With(new ThrowingEnricher()),
+                s => s.Json(NestedConfig, ms)));
+
+        logger.Info("hello", new Field("k", "v"));
+
+        Assert.NotEmpty(captured);
+        var fields = ReadLines(ms)[0].RootElement.GetProperty("fields");
+        Assert.Equal("v", fields.GetProperty("k").GetString());
+    }
+
+    //
+    // Logger.Dispose with sink throws — covers Dispose catch path
+    //
+
+    [Fact]
+    public void Dispose_SinkThrows_HandlerInvoked_OtherSinksStillDisposed()
+    {
+        var captured = new List<Exception>();
+        var goodSink = new TrackingDisposeSink();
+        var logger = Logger.Create(c => c
+            .OnInternalError(captured.Add)
+            .MinimumLevel(LogLevel.Trace)
+            .WriteTo.Sink(new ThrowingDisposeSink())
+            .WriteTo.Sink(goodSink));
+
+        logger.Dispose();
+
+        Assert.Single(captured);
+        Assert.True(goodSink.Disposed,
+            "Subsequent sink Dispose must run even after a prior sink throws.");
+    }
+
+    private sealed class ThrowingEnricher : ILogEnricher
+    {
+        public void Enrich(List<Field> target) => throw new InvalidOperationException("enricher boom");
+    }
+
+    private sealed class ThrowingDisposeSink : ILogSink
+    {
+        public void Write(DateTimeOffset timestamp, LogLevel level, string message,
+            ReadOnlySpan<Field> fields, Exception? exception)
+        { }
+        public void Dispose() => throw new InvalidOperationException("dispose boom");
+    }
+
+    private sealed class TrackingDisposeSink : ILogSink
+    {
+        public bool Disposed { get; private set; }
+        public void Write(DateTimeOffset timestamp, LogLevel level, string message,
+            ReadOnlySpan<Field> fields, Exception? exception)
+        { }
+        public void Dispose() => Disposed = true;
+    }
 }
