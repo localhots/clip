@@ -2,7 +2,7 @@
 
 BenchmarkDotNet v0.15.8, macOS Tahoe 26.3.1 (25D2128) [Darwin 25.3.0]  
 Apple M5, 1 CPU, 10 logical and 10 physical cores  
-Run: 2026-03-27 11:48
+Run: 2026-04-27 18:30
 
 Clip is a zero-dependency structured logging library for .NET 9. It formats directly into pooled UTF-8 byte buffers — no intermediate strings, no allocations on the hot path, no background-thread tricks to hide latency.
 
@@ -66,6 +66,44 @@ This report puts Clip head-to-head against eight other .NET loggers, all writing
 | Zero Dependencies | ✅ | — | ✅ | — | — | — | — |
 | MEL Adapter | ✅ | ✅ | ✅ | — | — | ✅ | — |
 
+| Hardening | Clip | Serilog | NLog | MEL | ZLogger | Log4Net | ZeroLog |
+|---------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Strips Control Chars / ANSI | ✅ | — | — | — | — | — | — |
+| InnerException Recursion Cap | ✅ 32 | — | ✅ 0¹ | — | — | — | — |
+| Per-Entry Size Cap | ✅ 4 MiB | — | — | — | — | — | ✅ 128 B² |
+| Async Queue Overflow Policy | DropOldest 1024 | Drop 10k | Discard 10k | Wait 2.5k | Grow ∞³ | — | Drop 1k |
+| Sink Failure Isolation | ✅ | ✅ | ⚠️⁴ | ⚠️⁵ | ⚠️⁸ | ⚠️⁶ | ✅ |
+| Self-Log Channel | ✅ | ✅ | ✅ | ⚠️⁷ | ⚠️⁸ | ✅ | ⚠️⁹ |
+| Reentrancy Guard | ✅ | — | — | — | — | ✅ | — |
+| First-Party Redaction | ✅ | — | — | ✅ .NET 8+¹⁰ | — | — | — |
+| Compile-Time Analyzers | ✅ 9 rules | 3rd-party | — | ✅ SYSLIB1xxx | — | — | — |
+
+
+**Hardening notes.** *Hardening* here means: what does the logger do when something in or around a log call goes wrong? An attacker-controlled value with control bytes. A pathological exception graph. A malformed input that explodes a destructor. A sink whose disk just filled up. An enricher that throws. The matrix above tracks nine vectors: input sanitization, exception/recursion bounds, per-entry size cap, async overflow policy, sink-failure isolation, self-log visibility, reentrancy, first-party redaction, and compile-time analyzers.
+
+*Cells with `⚠️` mean the feature exists in some form but has a footnote* *worth reading* — usually a default that turns the protection off, or a scope that doesn't cover the obvious case.
+
+¹ NLog's `MaxInnerExceptionLevel` defaults to `0`, which means inner exceptions are **not rendered at all** by default — a leftover from NLog 1.0 compatibility, not a hardening choice. Set it to a positive value to actually see your inner exceptions.
+
+² ZeroLog's per-entry bound is its zero-alloc fixed buffer (`LogMessageBufferSize`, default 128 bytes). Argument data exceeding it is silently truncated and a `[TRUNCATED]` suffix is appended — this is a design constraint, not a security feature. `Exception.ToString()` is called at format time and is **not** bounded by it.
+
+³ ZLogger's `FullMode = BackgroundBufferFullMode.Grow` is the default, so the queue is **unbounded**: a slow downstream sink will silently grow the buffer until the host OOMs. The bounded modes (`Block`, `DropNewest`, `DropOldest`) must be opted into. Source: [`ZLoggerOptions.cs`](https://github.com/Cysharp/ZLogger/blob/master/src/ZLogger/ZLoggerOptions.cs).
+
+⁴ NLog has no per-target failure isolation. Whether a thrown sink propagates depends on the global `LogManager.ThrowExceptions` flag (default `false`); when `true`, the exception escapes the log call and can take down the caller.
+
+⁵ MEL's `Logger.Log` calls every registered provider, then collects any thrown exceptions and rethrows as `AggregateException` with the message `"An error occurred while writing to logger(s)."` — so the other providers do receive the event, but the application-side log call does not return cleanly. Source: [`Logger.cs`](https://github.com/dotnet/runtime/blob/main/src/libraries/Microsoft.Extensions.Logging/src/Logger.cs).
+
+⁶ log4net's `OnlyOnceErrorHandler` (the default `IErrorHandler` for every appender) logs the **first** exception via `LogLog`, then silently suppresses every subsequent error from the same appender until the appender is recreated. Source: [`OnlyOnceErrorHandler.cs`](https://github.com/apache/logging-log4net/blob/master/src/log4net/Util/OnlyOnceErrorHandler.cs).
+
+⁷ MEL emits its own diagnostics through `LoggingEventSource` (an `EventSource`) — observable via ETW, dotnet-trace, or PerfView, but not a textual self-log channel suitable for ops without that tooling.
+
+⁸ ZLogger's `InternalErrorLogger` (the delegate that receives sink exceptions and internal failures) defaults to `null`. Until you set it, both per-sink failures and self-log events are silently discarded. Source: [`ZLoggerOptions.cs`](https://github.com/Cysharp/ZLogger/blob/master/src/ZLogger/ZLoggerOptions.cs).
+
+⁹ ZeroLog calls `LogManager.ReportInternalError` from its async writer on failure, but does not expose a configurable public channel to receive those reports.
+
+¹⁰ MEL's redaction goes through `Microsoft.Extensions.Compliance.Redaction` paired with `[DataClassification]` attributes on `[LoggerMessage]` parameters (.NET 8+). It only covers the source-generator path — plain `ILogger.LogInformation(...)` extension calls receive no redaction. Source: [`Compliance.Redaction`](https://github.com/dotnet/extensions/blob/main/src/Libraries/Microsoft.Extensions.Compliance.Redaction/README.md).
+
+**Clip's self-log and reentrancy.** Clip's self-log is opt-in via `LoggerConfig.OnInternalError(Action<Exception>)`; until the handler is wired, sink/enricher/filter/redactor exceptions are silently swallowed (the contract is that a log call cannot crash the application). The reentrancy guard is automatic: a log call made from inside a sink, enricher, filter, or redactor on the same thread returns silently rather than recursing.
 
 ---
 

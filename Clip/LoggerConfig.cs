@@ -25,6 +25,8 @@ public sealed class LoggerConfig
 {
     internal LogLevel MinLevel { get; private set; } = LogLevel.Info;
 
+    internal Action<Exception>? InternalErrorHandler { get; private set; }
+
     /// <summary>Configures where log entries are written.</summary>
     public SinkConfig WriteTo { get; }
 
@@ -53,6 +55,28 @@ public sealed class LoggerConfig
     public LoggerConfig MinimumLevel(LogLevel level)
     {
         MinLevel = level;
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a handler that receives exceptions thrown by sinks, enrichers, filters,
+    /// and redactors. By default these are silently swallowed so a misbehaving component
+    /// cannot crash the application; the handler lets you observe them without changing
+    /// that contract.
+    /// </summary>
+    /// <remarks>
+    /// The handler runs on the thread that produced the failure (the calling thread for
+    /// most components, the drain thread for <c>WriteTo.Background</c> sinks). Any
+    /// exception the handler itself throws is caught and discarded — the handler must
+    /// not crash the logger any more than the original failing component could.
+    /// </remarks>
+    /// <param name="handler">
+    /// The error sink. Setting this to <c>null</c> reverts to silent swallowing.
+    /// Replacing a previously-set handler is supported.
+    /// </param>
+    public LoggerConfig OnInternalError(Action<Exception>? handler)
+    {
+        InternalErrorHandler = handler;
         return this;
     }
 }

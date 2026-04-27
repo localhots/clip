@@ -17,6 +17,13 @@ public sealed class BackgroundSink(ILogSink inner, int capacity = 1024) : ILogSi
             SingleReader = true,
         });
 
+    // Wired by Logger.Create after configure() runs, so OnInternalError() and Background()
+    // can be called in either order. Until set, drain-loop failures are silently swallowed
+    // (preserving previous behavior).
+    private Action<Exception>? _onError;
+
+    internal void SetErrorHandler(Action<Exception>? handler) => _onError = handler;
+
     private readonly Task _drainTask = Task.CompletedTask; // Safe default; overwritten by chained ctor
 
     // Dummy bool parameter disambiguate from the primary constructor so Create()
@@ -62,9 +69,15 @@ public sealed class BackgroundSink(ILogSink inner, int capacity = 1024) : ILogSi
                     inner.Write(entry.Timestamp, entry.Level, entry.Message,
                         entry.Fields.AsSpan(0, entry.FieldCount), entry.Exception);
                 }
-                catch
+                catch (Exception ex)
                 {
                     // Inner sink failure must not crash the drain loop
+                    var handler = _onError;
+                    if (handler != null)
+                    {
+                        try { handler(ex); }
+                        catch { /* handler must not crash the drain loop */ }
+                    }
                 }
                 finally
                 {

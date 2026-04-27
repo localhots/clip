@@ -18,6 +18,14 @@ public sealed class Logger : ILogger, IZeroLogger
     private readonly EnricherEntry[]? _enrichers;
     private readonly ILogRedactor[]? _redactors;
     private readonly ILogFilter[]? _filters;
+    private readonly Action<Exception>? _onInternalError;
+
+    // Per-thread reentry guard. A log call made from inside a sink, enricher, filter,
+    // or redactor (e.g. via a property's ToString that itself logs) returns silently
+    // instead of recursing. This is a class-level static rather than per-instance so
+    // that two interacting Logger instances on the same thread can't ping-pong either.
+    [ThreadStatic]
+    private static bool _inLogCall;
 
     /// <summary>The global minimum log level. Calls below this level are no-ops.</summary>
     public LogLevel MinLevel { get; }
@@ -30,13 +38,14 @@ public sealed class Logger : ILogger, IZeroLogger
     }
 
     private Logger(LogLevel minLevel, SinkEntry[] sinks, EnricherEntry[]? enrichers, ILogRedactor[]? redactors,
-        ILogFilter[]? filters)
+        ILogFilter[]? filters, Action<Exception>? onInternalError)
     {
         MinLevel = minLevel;
         _sinks = sinks;
         _enrichers = enrichers;
         _redactors = redactors;
         _filters = filters;
+        _onInternalError = onInternalError;
     }
 
     /// <summary>
@@ -60,10 +69,31 @@ public sealed class Logger : ILogger, IZeroLogger
         configure(config);
         var raw = config.WriteTo.Build();
         var sinks = new SinkEntry[raw.Length];
+        var onError = config.InternalErrorHandler;
         for (var i = 0; i < raw.Length; i++)
+        {
+            // BackgroundSink runs the inner sink off-thread, so its drain-loop catches
+            // can't reach the Logger's _onInternalError directly — inject it here, after
+            // configure() has run, so the user can call .OnInternalError() in any order.
+            if (raw[i].Sink is BackgroundSink bg)
+                bg.SetErrorHandler(onError);
             sinks[i] = new SinkEntry(raw[i].Sink, raw[i].MinLevel, raw[i].Enrichers);
+        }
         return new Logger(config.MinLevel, sinks, config.Enrich.Build(), config.Redact.Build(),
-            config.Filter.Build());
+            config.Filter.Build(), onError);
+    }
+
+    private void HandleInternalError(Exception ex)
+    {
+        if (_onInternalError == null) return;
+        try
+        {
+            _onInternalError(ex);
+        }
+        catch
+        {
+            // The handler itself must not crash the logger.
+        }
     }
 
 
@@ -233,6 +263,8 @@ public sealed class Logger : ILogger, IZeroLogger
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void LogErgonomicImpl(LogLevel level, string message, object? fields, Exception? exception)
     {
+        if (_inLogCall) return;
+        _inLogCall = true;
         try
         {
             if (fields == null && !LogScope.HasCurrent && _enrichers == null && _redactors == null
@@ -257,9 +289,14 @@ public sealed class Logger : ILogger, IZeroLogger
                 FieldListPool.Return(list);
             }
         }
-        catch
+        catch (Exception ex)
         {
             // A log call must never crash the application.
+            HandleInternalError(ex);
+        }
+        finally
+        {
+            _inLogCall = false;
         }
     }
 
@@ -273,6 +310,8 @@ public sealed class Logger : ILogger, IZeroLogger
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void LogZeroAllocImpl(LogLevel level, string message, ReadOnlySpan<Field> fields, Exception? exception)
     {
+        if (_inLogCall) return;
+        _inLogCall = true;
         try
         {
             if (!LogScope.HasCurrent && _enrichers == null && _redactors == null && _filters == null)
@@ -296,9 +335,14 @@ public sealed class Logger : ILogger, IZeroLogger
                 FieldListPool.Return(list);
             }
         }
-        catch
+        catch (Exception ex)
         {
             // A log call must never crash the application.
+            HandleInternalError(ex);
+        }
+        finally
+        {
+            _inLogCall = false;
         }
     }
 
@@ -312,9 +356,10 @@ public sealed class Logger : ILogger, IZeroLogger
             {
                 entry.Enricher.Enrich(target);
             }
-            catch
+            catch (Exception ex)
             {
                 // Enricher failure must not crash the pipeline
+                HandleInternalError(ex);
             }
         }
     }
@@ -348,9 +393,10 @@ public sealed class Logger : ILogger, IZeroLogger
             {
                 if (filter.ShouldSkip(key)) return true;
             }
-            catch
+            catch (Exception ex)
             {
                 // Filter failure must not crash the pipeline
+                HandleInternalError(ex);
             }
         return false;
     }
@@ -371,9 +417,10 @@ public sealed class Logger : ILogger, IZeroLogger
             {
                 redactor.Redact(ref field);
             }
-            catch
+            catch (Exception ex)
             {
                 // Redactor failure must not crash the pipeline
+                HandleInternalError(ex);
             }
     }
 
@@ -390,9 +437,10 @@ public sealed class Logger : ILogger, IZeroLogger
                 else
                     WriteWithEnrichers(ts, level, message, fields, exception, in entry);
             }
-            catch
+            catch (Exception ex)
             {
                 // Sink failure must not affect other sinks
+                HandleInternalError(ex);
             }
         }
     }
@@ -410,7 +458,7 @@ public sealed class Logger : ILogger, IZeroLogger
             {
                 if (e.MinLevel > level) continue;
                 try { e.Enricher.Enrich(list); }
-                catch { }
+                catch (Exception ex) { HandleInternalError(ex); }
             }
 
             var span = CollectionsMarshal.AsSpan(list);
@@ -427,9 +475,9 @@ public sealed class Logger : ILogger, IZeroLogger
             {
                 entry.Sink.Dispose();
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignored
+                HandleInternalError(ex);
             }
     }
 }
