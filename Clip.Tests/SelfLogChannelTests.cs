@@ -188,6 +188,95 @@ public class SelfLogChannelTests
     }
 
     [Fact]
+    public void Handler_InvokedConcurrently_NoLost_AllReachHandler()
+    {
+        // Many threads logging in parallel against a throwing enricher: the user's handler
+        // is invoked from arbitrary threads. The handler the user writes is responsible for
+        // its own synchronization — but the logger itself must not lose or duplicate calls.
+        const int threads = 16;
+        const int perThread = 50;
+        var captured = new List<Exception>();
+        var captureLock = new object();
+        using var logger = Logger.Create(c => c
+            .OnInternalError(ex => { lock (captureLock) captured.Add(ex); })
+            .MinimumLevel(LogLevel.Trace)
+            .Enrich.With(new ThrowingEnricher())
+            .WriteTo.Sink(new CapturingSink()));
+
+        Parallel.For(0, threads, _ =>
+        {
+            for (var i = 0; i < perThread; i++) logger.Info("hello");
+        });
+
+        Assert.Equal(threads * perThread, captured.Count);
+        Assert.All(captured, e => Assert.Equal("enricher boom", e.Message));
+    }
+
+    [Fact]
+    public void Handler_ThrowsWithInnerException_LoggerStillWorks()
+    {
+        // A handler that throws an exception with an inner exception (e.g. AggregateException
+        // or wrapped failure) must be swallowed just like a plain throw — subsequent log
+        // calls must continue to function.
+        var capturing = new CapturingSink();
+        using var logger = Logger.Create(c => c
+            .OnInternalError(_ => throw new InvalidOperationException("outer",
+                new ApplicationException("inner")))
+            .MinimumLevel(LogLevel.Trace)
+            .WriteTo.Sink(new ThrowingSink())
+            .WriteTo.Sink(capturing));
+
+        logger.Info("first");
+        logger.Info("second");
+        logger.Info("third");
+
+        Assert.Equal(3, capturing.Calls);
+    }
+
+    [Fact]
+    public async Task BackgroundSink_HandlerThrows_DrainContinues()
+    {
+        // The drain loop must not die when the handler itself throws while reporting an
+        // inner-sink failure. After the handler-throws, subsequent entries must still drain.
+        var counter = new CapturingSink();
+        var inner = new SometimesThrowingSink(counter);
+
+        var logger = Logger.Create(c => c
+            .OnInternalError(_ => throw new Exception("handler boom"))
+            .MinimumLevel(LogLevel.Trace)
+            .WriteTo.Background(b => b.Sink(inner)));
+
+        // Half throw, half succeed — interleaving exercises the handler-throw path repeatedly
+        // without killing the drain task.
+        for (var i = 0; i < 20; i++) logger.Info($"msg-{i}");
+        logger.Dispose();
+
+        // Drain is async; allow time for entries to be processed past dispose.
+        for (var i = 0; i < 50 && counter.Calls < 10; i++) await Task.Delay(20);
+
+        // Half the entries were the throwing kind — only the non-throwing reach the counter
+        // sink, but the drain loop must have processed all 20 (no entries lost to a dead drain).
+        Assert.True(counter.Calls >= 10,
+            $"Drain task appears to have died after handler throw — only {counter.Calls} entries reached counter (expected ~10).");
+    }
+
+    private sealed class SometimesThrowingSink(CapturingSink success) : ILogSink
+    {
+        private int _n;
+        public void Write(DateTimeOffset timestamp, LogLevel level, string message,
+            ReadOnlySpan<Field> fields, Exception? exception)
+        {
+            // Odd calls throw, even calls succeed — exercises the handler-throws-after-sink-throws
+            // path repeatedly within a single drain.
+            if (Interlocked.Increment(ref _n) % 2 == 1)
+                throw new InvalidOperationException("alternating boom");
+            success.Write(timestamp, level, message, fields, exception);
+        }
+
+        public void Dispose() { }
+    }
+
+    [Fact]
     public void BackgroundSink_HandlerSet_RegardlessOfConfigOrder()
     {
         // .Background() before .OnInternalError() must still wire up.

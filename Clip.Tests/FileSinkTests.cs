@@ -301,6 +301,32 @@ public class FileSinkTests : IDisposable
     }
 
     [Fact]
+    public void Roll_UnlimitedRetention_AllEntriesPreserved()
+    {
+        // Existing Roll_UnlimitedRetention_KeepsAllFiles checks file count but not entry
+        // integrity. With maxRetainedFiles=0 nothing should be deleted, so the union of all
+        // files must contain every entry written. Catches a regression where rolling drops
+        // an entry mid-rotation.
+        var path = LogPath();
+        const int entryCount = 50;
+        using (var sink = new FileSink(path, maxFileSize: 100, maxRetainedFiles: 0))
+            for (var i = 0; i < entryCount; i++)
+                sink.Write(FixedTs, LogLevel.Info, $"entry-{i:D4}", [], null);
+
+        var seen = new HashSet<string>();
+        foreach (var file in Directory.GetFiles(_dir, "app*"))
+            foreach (var line in File.ReadAllLines(file).Where(l => !string.IsNullOrWhiteSpace(l)))
+            {
+                using var doc = JsonDocument.Parse(line);
+                seen.Add(doc.RootElement.GetProperty("msg").GetString()!);
+            }
+
+        Assert.Equal(entryCount, seen.Count);
+        for (var i = 0; i < entryCount; i++)
+            Assert.Contains($"entry-{i:D4}", seen);
+    }
+
+    [Fact]
     public void Constructor_ThrowsOnNegativeMaxRetainedFiles()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new FileSink(LogPath(), maxRetainedFiles: -1));

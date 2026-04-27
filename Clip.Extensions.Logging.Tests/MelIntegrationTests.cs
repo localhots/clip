@@ -257,6 +257,75 @@ public class MelIntegrationTests
     }
 
     //
+    // Scope state shape variants
+    //
+
+    [Fact]
+    public void BeginScope_WithStringState_AddedAsScopeField()
+    {
+        // Non-KVP scope state takes the fallback path: a single "Scope" field is added
+        // with the raw state as the value.
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        using (logger.BeginScope("Processing batch 5"))
+            logger.LogInformation("inside scope");
+
+        var fields = sink.Records[0].Fields;
+        Assert.Contains(fields, f => f.Key == "Scope" && (string)f.RefValue! == "Processing batch 5");
+    }
+
+    [Fact]
+    public void BeginScope_WithPocoState_AddedAsSingleScopeField()
+    {
+        // An anonymous object is not IReadOnlyList<KVP>, so it goes to the fallback path.
+        // The whole POCO ends up as the value of a single "Scope" field — properties are
+        // *not* expanded individually (that would require ad-hoc reflection on the hot path).
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        using (logger.BeginScope(new { RequestId = "abc" }))
+            logger.LogInformation("inside scope");
+
+        var fields = sink.Records[0].Fields;
+        Assert.Contains(fields, f => f.Key == "Scope");
+        Assert.DoesNotContain(fields, f => f.Key == "RequestId");
+    }
+
+    //
+    // EventId edge cases
+    //
+
+    [Fact]
+    public void EventId_ZeroIdWithName_NeitherFieldEmitted()
+    {
+        // MelFieldAdapter treats Id=0 as "no event" and skips BOTH EventId and EventName,
+        // even when a Name is present. This documents that contract — call sites that want
+        // to emit the name must use a non-zero Id.
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        logger.Log(MelLogLevel.Information, new EventId(0, "MyEvent"), "msg");
+
+        var fields = sink.Records[0].Fields;
+        Assert.DoesNotContain(fields, f => f.Key == "EventId");
+        Assert.DoesNotContain(fields, f => f.Key == "EventName");
+    }
+
+    [Fact]
+    public void EventId_NonZeroIdWithoutName_OnlyEventIdEmitted()
+    {
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        logger.Log(MelLogLevel.Information, new EventId(42), "msg");
+
+        var fields = sink.Records[0].Fields;
+        Assert.Contains(fields, f => f is { Key: "EventId", IntValue: 42 });
+        Assert.DoesNotContain(fields, f => f.Key == "EventName");
+    }
+
+    //
     // Nested scopes
     //
 

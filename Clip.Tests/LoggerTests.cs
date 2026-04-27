@@ -421,4 +421,34 @@ public class LoggerTests
         {
         }
     }
+
+    //
+    // FatalFlushTimeout configuration
+    //
+    // Behavior of Fatal() itself can't be tested in-process because it calls
+    // Environment.Exit(1) — these tests exercise the configuration setter only.
+    //
+
+    [Fact]
+    public void FatalFlushTimeout_Default_IsTwoSeconds()
+    {
+        var config = new LoggerConfig();
+        Assert.Equal(TimeSpan.FromSeconds(2), config.FatalFlushTimeoutValue);
+    }
+
+    [Fact]
+    public void FatalFlushTimeout_Zero_IsAllowed()
+    {
+        var config = new LoggerConfig();
+        config.FatalFlushTimeout(TimeSpan.Zero);
+        Assert.Equal(TimeSpan.Zero, config.FatalFlushTimeoutValue);
+    }
+
+    [Fact]
+    public void FatalFlushTimeout_Negative_ThrowsArgumentOutOfRange()
+    {
+        var config = new LoggerConfig();
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => config.FatalFlushTimeout(TimeSpan.FromMilliseconds(-1)));
+    }
 }

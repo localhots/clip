@@ -156,6 +156,50 @@ public class BackgroundSinkTests
         Assert.Null(ex);
     }
 
+    [Fact]
+    public void BackgroundSink_WriteAfterDispose_DoesNotCrashOrLeak()
+    {
+        // Once the channel is completed, TryWrite returns false. The Write code path must
+        // recognize this and return the rented Field[] to the pool rather than leaking it.
+        var counter = new CountingSink();
+        var bg = BackgroundSink.Create(counter);
+        bg.Write(DateTimeOffset.UtcNow, LogLevel.Info, "before", [], null);
+        bg.Dispose();
+
+        // These writes go to a completed channel — must not crash, must not leak.
+        for (var i = 0; i < 100; i++)
+        {
+            var ex = Record.Exception(() => bg.Write(
+                DateTimeOffset.UtcNow, LogLevel.Info, $"after-{i}",
+                [new Field("k", i), new Field("k2", i * 2)], null));
+            Assert.Null(ex);
+        }
+    }
+
+    [Fact]
+    public async Task BackgroundSink_ConcurrentWriteAndDispose_DoesNotCrash()
+    {
+        // Race many writes against dispose: writes may land before or after the channel
+        // is completed. Either outcome must be safe — no crashes, drain still finishes.
+        var counter = new CountingSink();
+        var bg = BackgroundSink.Create(counter);
+
+        var stop = new ManualResetEventSlim();
+        var writers = Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+        {
+            while (!stop.IsSet)
+                bg.Write(DateTimeOffset.UtcNow, LogLevel.Info, "concurrent",
+                    [new Field("k", "v")], null);
+        })).ToArray();
+
+        await Task.Delay(50);
+        bg.Dispose();
+        stop.Set();
+        await Task.WhenAll(writers);
+
+        Assert.True(counter.Count > 0);
+    }
+
     private sealed class CountingSink : ILogSink
     {
         private int _count;

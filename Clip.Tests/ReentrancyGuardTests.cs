@@ -42,6 +42,27 @@ public class ReentrancyGuardTests
         public void Dispose() { }
     }
 
+    private sealed class ReentrantFilter(Func<Logger> getLogger) : ILogFilter
+    {
+        public int Calls;
+        public bool ShouldSkip(string key)
+        {
+            Calls++;
+            getLogger().Info("from inside filter");
+            return false;
+        }
+    }
+
+    private sealed class ReentrantRedactor(Func<Logger> getLogger) : ILogRedactor
+    {
+        public int Calls;
+        public void Redact(ref Field field)
+        {
+            Calls++;
+            getLogger().Info("from inside redactor");
+        }
+    }
+
     [Fact]
     public void Sink_LogsRecursively_SinkInvokedExactlyOnce()
     {
@@ -91,6 +112,43 @@ public class ReentrancyGuardTests
         logger.Info("outer");
 
         Assert.Empty(captured);
+    }
+
+    [Fact]
+    public void Filter_LogsRecursively_FilterInvokedOncePerKey()
+    {
+        // A filter that logs from inside ShouldSkip must not recurse into the pipeline.
+        // The filter is consulted per field key; with a single field, ShouldSkip runs once.
+        Logger? logger = null;
+        var filter = new ReentrantFilter(() => logger!);
+        var counter = new CountingSink();
+        logger = Logger.Create(c => c
+            .MinimumLevel(LogLevel.Trace)
+            .Filter.With(filter)
+            .WriteTo.Sink(counter));
+
+        logger.Info("outer", new Field("k", "v"));
+
+        Assert.Equal(1, filter.Calls);
+        Assert.Equal(1, counter.Calls);
+    }
+
+    [Fact]
+    public void Redactor_LogsRecursively_RedactorInvokedOncePerField()
+    {
+        // A redactor that logs from inside Redact must not recurse into the pipeline.
+        Logger? logger = null;
+        var redactor = new ReentrantRedactor(() => logger!);
+        var counter = new CountingSink();
+        logger = Logger.Create(c => c
+            .MinimumLevel(LogLevel.Trace)
+            .Redact.With(redactor)
+            .WriteTo.Sink(counter));
+
+        logger.Info("outer", new Field("k", "v"));
+
+        Assert.Equal(1, redactor.Calls);
+        Assert.Equal(1, counter.Calls);
     }
 
     [Fact]

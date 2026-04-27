@@ -107,6 +107,36 @@ public class RedactorTests
         Assert.Equal("***", fields.GetProperty("SSN").GetString());
     }
 
+    [Fact]
+    public void FieldRedactor_RedactsBoolField()
+    {
+        var (logger, ms) = MakeLogger(c => c.Redact.Fields("Secret"));
+        logger.Info("test", new { Secret = true });
+
+        var fields = GetFields(ReadLines(ms)[0]);
+        Assert.Equal("***", fields.GetProperty("Secret").GetString());
+    }
+
+    [Fact]
+    public void FieldRedactor_RedactsDoubleField()
+    {
+        var (logger, ms) = MakeLogger(c => c.Redact.Fields("Balance"));
+        logger.Info("test", new { Balance = 1234.56 });
+
+        var fields = GetFields(ReadLines(ms)[0]);
+        Assert.Equal("***", fields.GetProperty("Balance").GetString());
+    }
+
+    [Fact]
+    public void FieldRedactor_RedactsLongField()
+    {
+        var (logger, ms) = MakeLogger(c => c.Redact.Fields("SSN"));
+        logger.Info("test", new { SSN = 123456789L });
+
+        var fields = GetFields(ReadLines(ms)[0]);
+        Assert.Equal("***", fields.GetProperty("SSN").GetString());
+    }
+
     //
     // PatternRedactor
     //
@@ -154,6 +184,49 @@ public class RedactorTests
 
         var fields = GetFields(ReadLines(ms)[0]);
         Assert.Equal("no match here", fields.GetProperty("Data").GetString());
+    }
+
+    [Fact]
+    public void PatternRedactor_NullStringField_DoesNotCrash()
+    {
+        // A null-valued string field must not throw inside the regex matcher.
+        var (logger, ms) = MakeLogger(c => c.Redact.Pattern(@"\d+"));
+        logger.Info("test", new Field("val", null!));
+
+        Assert.Single(ReadLines(ms));
+    }
+
+    [Fact]
+    public void PatternRedactor_EmptyReplacement_RemovesMatches()
+    {
+        var (logger, ms) = MakeLogger(c => c.Redact.Pattern(@"\d+", ""));
+        logger.Info("test", new { Data = "code-123-end" });
+
+        var fields = GetFields(ReadLines(ms)[0]);
+        Assert.Equal("code--end", fields.GetProperty("Data").GetString());
+    }
+
+    [Fact]
+    public void PatternRedactor_BackreferenceInReplacement_Works()
+    {
+        // Regex.Replace supports $1/$2 capture-group references; verify they pass through.
+        var (logger, ms) = MakeLogger(c =>
+            c.Redact.Pattern(@"(\d{3})-(\d{3})-(\d{4})", "***-***-$3"));
+        logger.Info("test", new { Phone = "555-123-4567" });
+
+        var fields = GetFields(ReadLines(ms)[0]);
+        Assert.Equal("***-***-4567", fields.GetProperty("Phone").GetString());
+    }
+
+    [Fact]
+    public void PatternRedactor_RegexTimeout_DoesNotCrash()
+    {
+        // Catastrophic-backtracking pattern. The Redactor's RegexMatchTimeoutException is
+        // caught inside Logger's redactor pipeline and surfaced via OnInternalError.
+        var (logger, ms) = MakeLogger(c => c.Redact.Pattern(@"(a+)+b"));
+        logger.Info("test", new { Data = new string('a', 25) + "c" });
+
+        Assert.Single(ReadLines(ms));
     }
 
     [Fact]
