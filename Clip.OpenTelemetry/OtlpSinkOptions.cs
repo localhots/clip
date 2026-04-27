@@ -87,7 +87,7 @@ public sealed class OtlpSinkOptions
             : null;
     }
 
-    private static void ParseKeyValuePairs(string input, Dictionary<string, string> target)
+    internal static void ParseKeyValuePairs(string input, Dictionary<string, string> target)
     {
         foreach (var pair in input.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {

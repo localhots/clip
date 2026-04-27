@@ -4,14 +4,14 @@
      font-family="system-ui, -apple-system, sans-serif">
   <rect width="600" height="228" fill="white"/>
   <text x="82" y="16.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">Clip</text>
-  <rect x="90" y="4" width="45.8" height="24" rx="2" fill="#0077b6"/>
-  <text x="141.8032961190856" y="16.0" text-anchor="start" dominant-baseline="central" font-size="11" fill="#374151">123 ns  (232 B)</text>
+  <rect x="90" y="4" width="46.0" height="24" rx="2" fill="#0077b6"/>
+  <text x="141.99681020733652" y="16.0" text-anchor="start" dominant-baseline="central" font-size="11" fill="#374151">124 ns  (232 B)</text>
   <text x="82" y="44.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">ClipZero</text>
-  <rect x="90" y="32" width="39.2" height="24" rx="2" fill="#00a0c4"/>
-  <text x="135.24986709197236" y="44.0" text-anchor="start" dominant-baseline="central" font-size="11" fill="#374151">105 ns  (176 B)</text>
+  <rect x="90" y="32" width="39.6" height="24" rx="2" fill="#00a0c4"/>
+  <text x="135.61828814460392" y="44.0" text-anchor="start" dominant-baseline="central" font-size="11" fill="#374151">106 ns  (176 B)</text>
   <text x="82" y="72.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">ClipMEL</text>
-  <rect x="90" y="60" width="82.7" height="24" rx="2" fill="#40c9e0"/>
-  <text x="178.6528442317916" y="72.0" text-anchor="start" dominant-baseline="central" font-size="11" fill="#374151">222 ns  (576 B)</text>
+  <rect x="90" y="60" width="72.0" height="24" rx="2" fill="#40c9e0"/>
+  <text x="167.9946836788942" y="72.0" text-anchor="start" dominant-baseline="central" font-size="11" fill="#374151">193 ns  (688 B)</text>
   <text x="82" y="100.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">MEL</text>
   <rect x="90" y="88" width="487.6" height="24" rx="2" fill="#7b2d8b"/>
   <text x="571.6406166932481" y="100.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">1,310 ns  (1440 B)</text>

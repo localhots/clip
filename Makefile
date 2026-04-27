@@ -1,4 +1,4 @@
-.PHONY: help build test check
+.PHONY: help build test check fuzz
 .PHONY: fmt fmt-cs fmt-py
 .PHONY: bench bench-full bench-clip bench-clip-full bench-asm bench-update archive-bench
 .PHONY: charts docs pdf usage
@@ -26,6 +26,10 @@ test:
 ## Build and test (quick validation)
 check: build test
 
+## Run property-based fuzz tests (FUZZ_ITER overrides iteration count)
+fuzz:
+	@FUZZ_ITER=$${FUZZ_ITER:-10000} dotnet test Clip.Fuzz/Clip.Fuzz.csproj -c Release
+
 ## Format all code (C# + Python)
 format: format-cs format-py
 
@@ -40,31 +44,28 @@ format-py:
 ## Run fast benchmarks (FILTER= to select, default all)
 bench:
 	BENCH_MODE=fast dotnet run -c Release --project $(BENCH_PROJECT) -- --filter $(FILTER)
-	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
 ## Run full benchmarks (FILTER= to select, default all)
 bench-full:
 	BENCH_MODE=full dotnet run -c Release --project $(BENCH_PROJECT) -- --filter $(FILTER)
-	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
 ## Run fast benchmarks — Clip only (~12 min, 5 data points)
 bench-clip:
 	BENCH_MODE=fast dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*_Clip' '*_ClipZero' '*_ClipMEL'
-	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
 ## Run full benchmarks — Clip only (~30 min, 50 data points)
 bench-clip-full:
 	BENCH_MODE=full dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*_Clip' '*_ClipZero' '*_ClipMEL'
-	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
 ## Import results into DB and archive raw artifacts
 bench-update:
 	@uv run python3 scripts/benchdb.py import
 	@$(MAKE) archive-bench
+	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 
 ## Dump JIT assembly for Clip hot paths
 bench-asm:
