@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from metadata import parse_mean_ns
 
-DEFAULT_DB_PATH = Path("tmp/benchdb.json")
+DEFAULT_DB_PATH = Path("docs/benchdb.json")
 
 
 def load_db(path: Path = DEFAULT_DB_PATH) -> dict:
