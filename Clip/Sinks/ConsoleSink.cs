@@ -26,7 +26,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
     private readonly int _minMessageWidth = config.MinMessageWidth;
     private readonly bool _sanitize = config.SanitizeControlCharacters;
     private readonly int _maxInnerExceptionDepth = config.MaxInnerExceptionDepth;
-    private readonly LogBuffer _buffer = new();
+    private readonly LogBuffer _buffer = new(config.MaxLogEntryBytes);
     private readonly TimestampCache _tsCache = new(config.TimestampFormat, config.CachePrecision);
     private readonly Lock _lock = new();
 
@@ -56,6 +56,10 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
             if (_colors) _buffer.WriteBytes("\e[1m"u8);
             WriteUserText(_buffer, message, allowMultiline: true);
             if (_colors) _buffer.WriteBytes("\e[0m"u8);
+            // Mark each completed section so a saturation later in the entry still
+            // ships everything up to the previous boundary. MarkSafePoint is a no-op
+            // once saturated, so a partial section can never advance the safe point.
+            _buffer.MarkSafePoint();
 
             // Fields
             if (fields.Length > 0)
@@ -64,6 +68,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
                 if (pad > 0) _buffer.WritePadding(pad);
                 _buffer.WriteBytes("  "u8);
                 WriteFieldsSorted(_buffer, level, fields);
+                _buffer.MarkSafePoint();
             }
 
             // Exception
@@ -72,9 +77,20 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
                 _buffer.WriteByte((byte)'\n');
                 _buffer.WriteBytes("  "u8);
                 WriteException(_buffer, exception);
+                _buffer.MarkSafePoint();
             }
 
             _buffer.WriteByte((byte)'\n');
+
+            // If any write hit the size cap, append `<truncated>\n` to the partial line.
+            // Console output is plain text — mid-line truncation is readable, no rewind
+            // of content needed, just a clean termination.
+            if (_buffer.Saturated)
+            {
+                _buffer.RewindToSafePoint();
+                _buffer.WriteMarker(" <truncated>\n"u8);
+            }
+
             _output.Write(_buffer.WrittenSpan);
         }
     }
@@ -119,6 +135,7 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
             }
 
             WriteFieldValue(buf, in f);
+            buf.MarkSafePoint();
         }
     }
 

@@ -26,6 +26,14 @@ public sealed class JsonFormatConfig
     /// </summary>
     public int MaxInnerExceptionDepth { get; init; } = 32;
 
+    /// <summary>
+    /// Maximum bytes a single rendered log entry may occupy. When a log call would push
+    /// past this, the partial entry is discarded and a small fixed JSON object
+    /// (<c>{"ts":..., "level":..., "msg":"&lt;log entry truncated&gt;", "truncated":true}</c>)
+    /// is emitted instead — keeping the output line valid JSON. Default 4 MiB.
+    /// </summary>
+    public int MaxLogEntryBytes { get; init; } = 4 * 1024 * 1024;
+
     public IReadOnlyList<string> LevelLabels
     {
         get => _levelLabels;

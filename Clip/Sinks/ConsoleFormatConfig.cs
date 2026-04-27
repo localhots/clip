@@ -33,6 +33,14 @@ public sealed class ConsoleFormatConfig
     /// </summary>
     public int MaxInnerExceptionDepth { get; init; } = 32;
 
+    /// <summary>
+    /// Maximum bytes a single rendered log entry may occupy. When a log call would push
+    /// past this, the partial entry is discarded and a small fixed fallback line
+    /// (<c>&lt;log entry truncated&gt;</c>) is emitted instead. Bounds memory exposure
+    /// when a field value (or other input) is unexpectedly large. Default 4 MiB.
+    /// </summary>
+    public int MaxLogEntryBytes { get; init; } = 4 * 1024 * 1024;
+
     public int MinMessageWidth
     {
         get => _minMessageWidth;
