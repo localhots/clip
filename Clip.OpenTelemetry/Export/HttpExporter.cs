@@ -18,7 +18,10 @@ internal sealed class HttpExporter : IExporter
 
     internal HttpExporter(OtlpSinkOptions options)
     {
-        _httpClient = new HttpClient();
+        // Cap response body well above any legitimate ExportLogsServiceResponse
+        // (a partial_success counter + short error string) to bound memory
+        // exposure if the collector is malicious or compromised.
+        _httpClient = new HttpClient { MaxResponseContentBufferSize = 1 * 1024 * 1024 };
         _timeout = options.ExportTimeout;
 
         foreach (var (key, value) in options.Headers)
