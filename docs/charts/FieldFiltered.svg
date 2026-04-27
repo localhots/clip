@@ -5,8 +5,8 @@
   <rect width="600" height="60" fill="white"/>
   <text x="82" y="16.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">Clip</text>
   <rect x="90" y="4" width="490.0" height="24" rx="2" fill="#0077b6"/>
-  <text x="574.0" y="16.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">91 ns  (40 B)</text>
+  <text x="574.0" y="16.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">94 ns  (40 B)</text>
   <text x="82" y="44.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">ClipZero</text>
-  <rect x="90" y="32" width="458.5" height="24" rx="2" fill="#00a0c4"/>
-  <text x="542.4807903402855" y="44.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">85 ns</text>
+  <rect x="90" y="32" width="482.7" height="24" rx="2" fill="#00a0c4"/>
+  <text x="566.6834692364714" y="44.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">93 ns</text>
 </svg>

@@ -1,8 +1,8 @@
 # Clip — Benchmark Comparison
 
-BenchmarkDotNet v0.15.8, macOS Tahoe 26.3.1 (25D2128) [Darwin 25.3.0]  
+BenchmarkDotNet v0.15.8, macOS Tahoe 26.4.1 (25E253) [Darwin 25.4.0]  
 Apple M5, 1 CPU, 10 logical and 10 physical cores  
-Run: 2026-03-27 11:48
+Run: 2026-04-28 00:55
 
 Clip is a zero-dependency structured logging library for .NET 9. It formats directly into pooled UTF-8 byte buffers — no intermediate strings, no allocations on the hot path, no background-thread tricks to hide latency.
 
@@ -86,7 +86,7 @@ logger.Debug("This is filtered out");
 |--------|-----:|------:|-------:|----------:|
 | **Clip** | 0.0000 ns | 0.0000 ns | 0.0000 ns | - |
 | **ClipZero** | 0.0000 ns | 0.0000 ns | 0.0000 ns | - |
-| **ClipMEL** | 5.1697 ns | 0.0136 ns | 0.0273 ns | - |
+| **ClipMEL** | 4.9647 ns | 0.0094 ns | 0.0176 ns | - |
 | MEL | 4.8919 ns | 0.0074 ns | 0.0145 ns | - |
 | MELSrcGen | 0.4775 ns | 0.0002 ns | 0.0004 ns | - |
 | Serilog | 0.5219 ns | 0.0057 ns | 0.0113 ns | - |
@@ -166,16 +166,16 @@ logger.Info("Request handled");
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 26.42 ns | 0.020 ns | 0.040 ns | 1.00 | - |
-| **ClipZero** | 26.44 ns | 0.020 ns | 0.039 ns | 1.00 | - |
-| **ClipMEL** | 57.54 ns | 0.042 ns | 0.084 ns | 2.18 | 64 B |
-| MEL | 372.86 ns | 5.612 ns | 11.337 ns | 14.11 | 304 B |
-| MELSrcGen | 375.11 ns | 8.219 ns | 16.603 ns | 14.20 | 320 B |
-| Serilog | 276.33 ns | 0.473 ns | 0.945 ns | 10.46 | 416 B |
-| ZLogger | 341.99 ns | 0.410 ns | 0.810 ns | 12.94 | - |
-| NLog | 143.87 ns | 0.256 ns | 0.518 ns | 5.45 | 304 B |
-| Log4Net | 181.89 ns | 0.243 ns | 0.491 ns | 6.88 | 392 B |
-| ZeroLog | 113.13 ns | 0.133 ns | 0.266 ns | 4.28 | - |
+| **Clip** | 27.19 ns | 0.019 ns | 0.033 ns | 1.00 | - |
+| **ClipZero** | 27.50 ns | 0.049 ns | 0.095 ns | 1.01 | - |
+| **ClipMEL** | 79.17 ns | 0.313 ns | 0.596 ns | 2.91 | 320 B |
+| MEL | 372.86 ns | 5.612 ns | 11.337 ns | 13.71 | 304 B |
+| MELSrcGen | 375.11 ns | 8.219 ns | 16.603 ns | 13.80 | 320 B |
+| Serilog | 276.33 ns | 0.473 ns | 0.945 ns | 10.16 | 416 B |
+| ZLogger | 341.99 ns | 0.410 ns | 0.810 ns | 12.58 | - |
+| NLog | 143.87 ns | 0.256 ns | 0.518 ns | 5.29 | 304 B |
+| Log4Net | 181.89 ns | 0.243 ns | 0.491 ns | 6.69 | 392 B |
+| ZeroLog | 113.13 ns | 0.133 ns | 0.266 ns | 4.16 | - |
 
 </details>
 
@@ -234,16 +234,16 @@ logger.Info("Request handled", new {
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 191.20 ns | 0.284 ns | 0.573 ns | 1.00 | 72 B |
-| **ClipZero** | 140.63 ns | 0.121 ns | 0.241 ns | 0.74 | - |
-| **ClipMEL** | 390.26 ns | 0.448 ns | 0.906 ns | 2.04 | 608 B |
-| MEL | 886.08 ns | 3.898 ns | 7.875 ns | 4.63 | 760 B |
-| MELSrcGen | 783.41 ns | 5.874 ns | 11.865 ns | 4.10 | 856 B |
-| Serilog | 715.36 ns | 2.004 ns | 4.049 ns | 3.74 | 1216 B |
-| ZLogger | 500.95 ns | 0.478 ns | 0.955 ns | 2.62 | - |
-| NLog | 615.36 ns | 1.444 ns | 2.916 ns | 3.22 | 1368 B |
-| Log4Net | 318.79 ns | 0.334 ns | 0.660 ns | 1.67 | 888 B |
-| ZeroLog | 278.05 ns | 0.178 ns | 0.356 ns | 1.45 | - |
+| **Clip** | 194.81 ns | 0.471 ns | 0.931 ns | 1.00 | 72 B |
+| **ClipZero** | 147.40 ns | 0.184 ns | 0.341 ns | 0.76 | - |
+| **ClipMEL** | 425.85 ns | 1.189 ns | 2.234 ns | 2.19 | 1064 B |
+| MEL | 886.08 ns | 3.898 ns | 7.875 ns | 4.55 | 760 B |
+| MELSrcGen | 783.41 ns | 5.874 ns | 11.865 ns | 4.02 | 856 B |
+| Serilog | 715.36 ns | 2.004 ns | 4.049 ns | 3.67 | 1216 B |
+| ZLogger | 500.95 ns | 0.478 ns | 0.955 ns | 2.57 | - |
+| NLog | 615.36 ns | 1.444 ns | 2.916 ns | 3.16 | 1368 B |
+| Log4Net | 318.79 ns | 0.334 ns | 0.660 ns | 1.64 | 888 B |
+| ZeroLog | 278.05 ns | 0.178 ns | 0.356 ns | 1.43 | - |
 
 </details>
 
@@ -299,14 +299,14 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 125.06 ns | 0.070 ns | 0.136 ns | 1.00 | 232 B |
-| **ClipZero** | 107.27 ns | 0.463 ns | 0.924 ns | 0.86 | 176 B |
-| **ClipMEL** | 231.44 ns | 0.538 ns | 1.037 ns | 1.85 | 576 B |
-| MEL | 557.60 ns | 10.829 ns | 21.875 ns | 4.46 | 744 B |
-| MELSrcGen | 540.52 ns | 11.744 ns | 23.723 ns | 4.32 | 760 B |
-| Serilog | 648.46 ns | 2.207 ns | 4.458 ns | 5.19 | 1344 B |
-| ZLogger | 517.91 ns | 5.842 ns | 11.801 ns | 4.14 | 200 B |
-| NLog | 422.64 ns | 0.709 ns | 1.431 ns | 3.38 | 1288 B |
+| **Clip** | 134.87 ns | 0.948 ns | 1.781 ns | 1.00 | 232 B |
+| **ClipZero** | 115.54 ns | 0.375 ns | 0.723 ns | 0.86 | 176 B |
+| **ClipMEL** | 215.23 ns | 3.054 ns | 6.169 ns | 1.60 | 688 B |
+| MEL | 557.60 ns | 10.829 ns | 21.875 ns | 4.13 | 744 B |
+| MELSrcGen | 540.52 ns | 11.744 ns | 23.723 ns | 4.01 | 760 B |
+| Serilog | 648.46 ns | 2.207 ns | 4.458 ns | 4.81 | 1344 B |
+| ZLogger | 517.91 ns | 5.842 ns | 11.801 ns | 3.84 | 200 B |
+| NLog | 422.64 ns | 0.709 ns | 1.431 ns | 3.13 | 1288 B |
 
 </details>
 
@@ -358,16 +358,16 @@ logger.Error("Connection failed", ex, new {
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 1,719.24 ns | 1.907 ns | 3.852 ns | 1.00 | 2480 B |
-| **ClipZero** | 1,704.84 ns | 1.200 ns | 2.396 ns | 0.99 | 2448 B |
-| **ClipMEL** | 1,799.20 ns | 1.795 ns | 3.458 ns | 1.05 | 2744 B |
-| MEL | 3,401.88 ns | 41.472 ns | 83.775 ns | 1.98 | 4064 B |
-| MELSrcGen | 3,140.83 ns | 24.142 ns | 48.768 ns | 1.83 | 4064 B |
-| Serilog | 2,152.17 ns | 2.143 ns | 4.231 ns | 1.25 | 3960 B |
-| ZLogger | 1,988.66 ns | 232.719 ns | 448.371 ns | 1.16 | 449 B |
-| NLog | 2,180.38 ns | 2.377 ns | 4.748 ns | 1.27 | 4136 B |
-| Log4Net | 1,954.66 ns | 1.415 ns | 2.726 ns | 1.14 | 4544 B |
-| ZeroLog | 1,913.81 ns | 3.963 ns | 7.915 ns | 1.11 | 2832 B |
+| **Clip** | 2,166.32 ns | 7.282 ns | 14.710 ns | 1.00 | 2480 B |
+| **ClipZero** | 2,145.55 ns | 5.523 ns | 10.903 ns | 0.99 | 2448 B |
+| **ClipMEL** | 2,280.80 ns | 8.562 ns | 17.099 ns | 1.05 | 3080 B |
+| MEL | 3,401.88 ns | 41.472 ns | 83.775 ns | 1.57 | 4064 B |
+| MELSrcGen | 3,140.83 ns | 24.142 ns | 48.768 ns | 1.45 | 4064 B |
+| Serilog | 2,152.17 ns | 2.143 ns | 4.231 ns | 0.99 | 3960 B |
+| ZLogger | 1,988.66 ns | 232.719 ns | 448.371 ns | 0.92 | 449 B |
+| NLog | 2,180.38 ns | 2.377 ns | 4.748 ns | 1.01 | 4136 B |
+| Log4Net | 1,954.66 ns | 1.415 ns | 2.726 ns | 0.90 | 4544 B |
+| ZeroLog | 1,913.81 ns | 3.963 ns | 7.915 ns | 0.88 | 2832 B |
 
 </details>
 
@@ -451,14 +451,14 @@ logger.Info("Request handled");
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 26.68 ns | 0.011 ns | 0.020 ns | 1.00 | - |
-| **ClipZero** | 27.01 ns | 0.007 ns | 0.014 ns | 1.01 | - |
-| **ClipMEL** | 61.61 ns | 0.144 ns | 0.274 ns | 2.31 | 64 B |
-| MEL | 837.89 ns | 3.834 ns | 7.656 ns | 31.41 | 784 B |
-| MELSrcGen | 802.90 ns | 9.295 ns | 18.777 ns | 30.09 | 752 B |
-| Serilog | 247.25 ns | 0.292 ns | 0.589 ns | 9.27 | 608 B |
-| ZLogger | 325.55 ns | 7.446 ns | 15.042 ns | 12.20 | - |
-| NLog | 138.79 ns | 0.238 ns | 0.476 ns | 5.20 | 291 B |
+| **Clip** | 27.50 ns | 0.007 ns | 0.012 ns | 1.00 | - |
+| **ClipZero** | 31.94 ns | 1.023 ns | 2.043 ns | 1.16 | - |
+| **ClipMEL** | 80.60 ns | 0.206 ns | 0.411 ns | 2.93 | 320 B |
+| MEL | 837.89 ns | 3.834 ns | 7.656 ns | 30.47 | 784 B |
+| MELSrcGen | 802.90 ns | 9.295 ns | 18.777 ns | 29.20 | 752 B |
+| Serilog | 247.25 ns | 0.292 ns | 0.589 ns | 8.99 | 608 B |
+| ZLogger | 325.55 ns | 7.446 ns | 15.042 ns | 11.84 | - |
+| NLog | 138.79 ns | 0.238 ns | 0.476 ns | 5.05 | 291 B |
 
 </details>
 
@@ -505,14 +505,14 @@ logger.Info("Request handled", new {
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 176.20 ns | 0.262 ns | 0.529 ns | 1.00 | 72 B |
-| **ClipZero** | 129.18 ns | 0.092 ns | 0.185 ns | 0.73 | - |
-| **ClipMEL** | 451.20 ns | 0.459 ns | 0.862 ns | 2.56 | 704 B |
-| MEL | 1,924.97 ns | 4.528 ns | 9.043 ns | 10.92 | 1824 B |
-| MELSrcGen | 1,931.31 ns | 14.522 ns | 28.323 ns | 10.96 | 2272 B |
-| Serilog | 911.76 ns | 0.723 ns | 1.323 ns | 5.17 | 1408 B |
-| ZLogger | 1,154.44 ns | 86.505 ns | 170.752 ns | 6.55 | 12 B |
-| NLog | 789.35 ns | 0.932 ns | 1.882 ns | 4.48 | 1387 B |
+| **Clip** | 185.53 ns | 0.463 ns | 0.926 ns | 1.00 | 72 B |
+| **ClipZero** | 133.05 ns | 0.076 ns | 0.141 ns | 0.72 | - |
+| **ClipMEL** | 483.39 ns | 0.906 ns | 1.768 ns | 2.61 | 1160 B |
+| MEL | 1,924.97 ns | 4.528 ns | 9.043 ns | 10.38 | 1824 B |
+| MELSrcGen | 1,931.31 ns | 14.522 ns | 28.323 ns | 10.41 | 2272 B |
+| Serilog | 911.76 ns | 0.723 ns | 1.323 ns | 4.91 | 1408 B |
+| ZLogger | 1,154.44 ns | 86.505 ns | 170.752 ns | 6.22 | 12 B |
+| NLog | 789.35 ns | 0.932 ns | 1.882 ns | 4.25 | 1387 B |
 
 </details>
 
@@ -556,14 +556,14 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 123.08 ns | 0.101 ns | 0.203 ns | 1.00 | 232 B |
-| **ClipZero** | 105.47 ns | 0.145 ns | 0.293 ns | 0.86 | 176 B |
-| **ClipMEL** | 222.10 ns | 1.266 ns | 2.409 ns | 1.80 | 576 B |
-| MEL | 1,310.36 ns | 47.158 ns | 95.262 ns | 10.65 | 1440 B |
-| MELSrcGen | 1,316.70 ns | 31.368 ns | 63.366 ns | 10.70 | 1432 B |
-| Serilog | 677.96 ns | 0.433 ns | 0.854 ns | 5.51 | 1432 B |
-| ZLogger | 583.22 ns | 9.744 ns | 19.683 ns | 4.74 | 200 B |
-| NLog | 441.53 ns | 0.435 ns | 0.827 ns | 3.59 | 1291 B |
+| **Clip** | 123.60 ns | 0.299 ns | 0.576 ns | 1.00 | 232 B |
+| **ClipZero** | 106.46 ns | 0.375 ns | 0.732 ns | 0.86 | 176 B |
+| **ClipMEL** | 193.46 ns | 0.596 ns | 1.203 ns | 1.57 | 688 B |
+| MEL | 1,310.36 ns | 47.158 ns | 95.262 ns | 10.60 | 1440 B |
+| MELSrcGen | 1,316.70 ns | 31.368 ns | 63.366 ns | 10.65 | 1432 B |
+| Serilog | 677.96 ns | 0.433 ns | 0.854 ns | 5.49 | 1432 B |
+| ZLogger | 583.22 ns | 9.744 ns | 19.683 ns | 4.72 | 200 B |
+| NLog | 441.53 ns | 0.435 ns | 0.827 ns | 3.57 | 1291 B |
 
 </details>
 
@@ -611,14 +611,14 @@ logger.Error("Connection failed", ex, new {
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 1,713.26 ns | 1.670 ns | 3.373 ns | 1.00 | 2480 B |
-| **ClipZero** | 1,676.58 ns | 1.412 ns | 2.852 ns | 0.98 | 2448 B |
-| **ClipMEL** | 1,771.99 ns | 2.577 ns | 4.841 ns | 1.03 | 2464 B |
-| MEL | 3,751.33 ns | 12.818 ns | 24.388 ns | 2.19 | 4360 B |
-| MELSrcGen | 3,795.16 ns | 11.699 ns | 21.974 ns | 2.22 | 4368 B |
-| Serilog | 2,394.40 ns | 2.720 ns | 5.306 ns | 1.40 | 3760 B |
-| ZLogger | 4,991.11 ns | 1,105.786 ns | 2,208.375 ns | 2.91 | 459 B |
-| NLog | 2,345.66 ns | 2.618 ns | 5.288 ns | 1.37 | 4435 B |
+| **Clip** | 2,163.61 ns | 5.005 ns | 9.879 ns | 1.00 | 2480 B |
+| **ClipZero** | 2,171.06 ns | 2.324 ns | 4.364 ns | 1.00 | 2448 B |
+| **ClipMEL** | 2,303.13 ns | 4.953 ns | 9.892 ns | 1.06 | 3080 B |
+| MEL | 3,751.33 ns | 12.818 ns | 24.388 ns | 1.73 | 4360 B |
+| MELSrcGen | 3,795.16 ns | 11.699 ns | 21.974 ns | 1.75 | 4368 B |
+| Serilog | 2,394.40 ns | 2.720 ns | 5.306 ns | 1.11 | 3760 B |
+| ZLogger | 4,991.11 ns | 1,105.786 ns | 2,208.375 ns | 2.31 | 459 B |
+| NLog | 2,345.66 ns | 2.618 ns | 5.288 ns | 1.08 | 4435 B |
 
 </details>
 
@@ -683,10 +683,10 @@ logger.Info("Request handled", new { Method, Status, Elapsed });
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 148.93 ns | 0.314 ns | 0.598 ns | 1.00 | 40 B |
-| **ClipZero** | 145.20 ns | 0.164 ns | 0.320 ns | 0.97 | - |
-| Serilog | 641.26 ns | 2.742 ns | 5.150 ns | 4.31 | 1136 B |
-| NLog | 609.19 ns | 2.051 ns | 3.801 ns | 4.09 | 1248 B |
+| **Clip** | 154.86 ns | 0.417 ns | 0.813 ns | 1.00 | 40 B |
+| **ClipZero** | 153.04 ns | 0.322 ns | 0.644 ns | 0.99 | - |
+| Serilog | 641.26 ns | 2.742 ns | 5.150 ns | 4.14 | 1136 B |
+| NLog | 609.19 ns | 2.051 ns | 3.801 ns | 3.93 | 1248 B |
 
 </details>
 
@@ -719,8 +719,8 @@ logger.Info("Request handled", new { Method, Status, password = "secret" });
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 91.10 ns | 0.241 ns | 0.465 ns | 1.00 | 40 B |
-| **ClipZero** | 85.24 ns | 0.068 ns | 0.130 ns | 0.94 | - |
+| **Clip** | 94.43 ns | 0.182 ns | 0.347 ns | 1.00 | 40 B |
+| **ClipZero** | 93.02 ns | 0.212 ns | 0.424 ns | 0.99 | - |
 
 </details>
 
@@ -749,8 +749,8 @@ logger.Info("Request handled", new { Method, Status, Token = "bearer-abc" });
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 106.22 ns | 0.171 ns | 0.317 ns | 1.00 | 40 B |
-| **ClipZero** | 100.30 ns | 0.105 ns | 0.194 ns | 0.94 | - |
+| **Clip** | 110.18 ns | 0.331 ns | 0.646 ns | 1.00 | 40 B |
+| **ClipZero** | 106.66 ns | 0.200 ns | 0.381 ns | 0.97 | - |
 
 </details>
 
@@ -781,8 +781,8 @@ logger.Info("Request handled",
 
 | Logger | Mean | Error | StdDev | vs Clip | Allocated |
 |--------|-----:|------:|-------:|--------:|----------:|
-| **Clip** | 165.41 ns | 0.354 ns | 0.682 ns | 1.00 | 48 B |
-| **ClipZero** | 162.99 ns | 0.849 ns | 1.553 ns | 0.99 | - |
+| **Clip** | 173.65 ns | 0.475 ns | 0.892 ns | 1.00 | 48 B |
+| **ClipZero** | 171.62 ns | 0.386 ns | 0.753 ns | 0.99 | - |
 
 </details>
 

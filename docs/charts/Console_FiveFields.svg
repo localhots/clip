@@ -4,14 +4,14 @@
      font-family="system-ui, -apple-system, sans-serif">
   <rect width="600" height="284" fill="white"/>
   <text x="82" y="16.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">Clip</text>
-  <rect x="90" y="4" width="105.7" height="24" rx="2" fill="#0077b6"/>
-  <text x="189.7331166486096" y="16.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">191 ns  (72 B)</text>
+  <rect x="90" y="4" width="107.7" height="24" rx="2" fill="#0077b6"/>
+  <text x="191.72943752257132" y="16.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">195 ns  (72 B)</text>
   <text x="82" y="44.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">ClipZero</text>
-  <rect x="90" y="32" width="77.8" height="24" rx="2" fill="#00a0c4"/>
-  <text x="161.76803448898517" y="44.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">141 ns</text>
+  <rect x="90" y="32" width="81.5" height="24" rx="2" fill="#00a0c4"/>
+  <text x="165.51182737450344" y="44.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">147 ns</text>
   <text x="82" y="72.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">ClipMEL</text>
-  <rect x="90" y="60" width="215.8" height="24" rx="2" fill="#40c9e0"/>
-  <text x="299.81279342723" y="72.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">390 ns  (608 B)</text>
+  <rect x="90" y="60" width="235.5" height="24" rx="2" fill="#40c9e0"/>
+  <text x="319.49397345612135" y="72.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">426 ns  (1064 B)</text>
   <text x="82" y="100.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">MEL</text>
   <rect x="90" y="88" width="490.0" height="24" rx="2" fill="#7b2d8b"/>
   <text x="574.0" y="100.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">886 ns  (760 B)</text>
