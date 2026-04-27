@@ -19,7 +19,7 @@ build:
 
 ## Run unit tests
 test:
-	@dotnet test Clip.slnx -c Release
+	@dotnet test Clip.sln -c Release
 
 ## Build and test (quick validation)
 check: build test
@@ -29,7 +29,7 @@ format: format-cs format-py
 
 ## Format C# code
 format-cs:
-	dotnet format Clip.slnx
+	dotnet format Clip.sln
 
 ## Format Python scripts
 format-py:
