@@ -12,13 +12,15 @@ internal static class MelFieldAdapter
         EventId eventId)
     {
         // Count first, allocate once — avoids List<Field> + ToArray copy.
+        // EventId and EventName are independent: a caller can supply either or both, and
+        // MEL's default `EventId(0, null)` (from log macros that don't pass an event) is
+        // what we want to skip. Including a Name-only EventId is rare but valid.
         var kvps = state as IReadOnlyList<KeyValuePair<string, object?>>;
+        var hasEventId = eventId.Id != 0;
+        var hasEventName = eventId.Name is not null;
         var count = 1; // SourceContext always present
-        if (eventId.Id != 0)
-        {
-            count++;
-            if (eventId.Name is not null) count++;
-        }
+        if (hasEventId) count++;
+        if (hasEventName) count++;
 
         if (kvps is not null)
             for (var i = 0; i < kvps.Count; i++)
@@ -29,12 +31,10 @@ internal static class MelFieldAdapter
         var idx = 0;
         fields[idx++] = new Field("SourceContext", categoryName);
 
-        if (eventId.Id != 0)
-        {
+        if (hasEventId)
             fields[idx++] = new Field("EventId", eventId.Id);
-            if (eventId.Name is not null)
-                fields[idx++] = new Field("EventName", eventId.Name);
-        }
+        if (hasEventName)
+            fields[idx++] = new Field("EventName", eventId.Name!);
 
         if (kvps is not null)
             for (var i = 0; i < kvps.Count; i++)

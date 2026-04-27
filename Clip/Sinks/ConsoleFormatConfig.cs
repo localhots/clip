@@ -16,6 +16,31 @@ public sealed class ConsoleFormatConfig
     public TimeSpan CachePrecision { get; init; } = TimeSpan.FromMilliseconds(1);
     public bool Colors { get; init; } = true;
 
+    /// <summary>
+    /// When true (default), strips C0 control characters and DEL from user-supplied
+    /// strings (message body, field values, exception data) before writing them, to
+    /// prevent ANSI/terminal-control injection from attacker-influenced log values.
+    /// Tab is always preserved; CR/LF is preserved in messages and stack traces and
+    /// stripped from field values and <see cref="Exception.Data"/> entries.
+    /// </summary>
+    public bool SanitizeControlCharacters { get; init; } = true;
+
+    /// <summary>
+    /// Maximum <see cref="Exception.InnerException"/> chain depth to render. Beyond this,
+    /// a truncation sentinel is emitted instead of recursing. Caps stack usage on
+    /// pathologically deep chains (which are easy to construct from deserialized data).
+    /// Default 32.
+    /// </summary>
+    public int MaxInnerExceptionDepth { get; init; } = 32;
+
+    /// <summary>
+    /// Maximum bytes a single rendered log entry may occupy. When a log call would push
+    /// past this, the partial entry is discarded and a small fixed fallback line
+    /// (<c>&lt;log entry truncated&gt;</c>) is emitted instead. Bounds memory exposure
+    /// when a field value (or other input) is unexpectedly large. Default 4 MiB.
+    /// </summary>
+    public int MaxLogEntryBytes { get; init; } = 4 * 1024 * 1024;
+
     public int MinMessageWidth
     {
         get => _minMessageWidth;

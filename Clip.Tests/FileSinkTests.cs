@@ -301,9 +301,115 @@ public class FileSinkTests : IDisposable
     }
 
     [Fact]
+    public void Roll_UnlimitedRetention_AllEntriesPreserved()
+    {
+        // Existing Roll_UnlimitedRetention_KeepsAllFiles checks file count but not entry
+        // integrity. With maxRetainedFiles=0 nothing should be deleted, so the union of all
+        // files must contain every entry written. Catches a regression where rolling drops
+        // an entry mid-rotation.
+        var path = LogPath();
+        const int entryCount = 50;
+        using (var sink = new FileSink(path, maxFileSize: 100, maxRetainedFiles: 0))
+            for (var i = 0; i < entryCount; i++)
+                sink.Write(FixedTs, LogLevel.Info, $"entry-{i:D4}", [], null);
+
+        var seen = new HashSet<string>();
+        foreach (var file in Directory.GetFiles(_dir, "app*"))
+            foreach (var line in File.ReadAllLines(file).Where(l => !string.IsNullOrWhiteSpace(l)))
+            {
+                using var doc = JsonDocument.Parse(line);
+                seen.Add(doc.RootElement.GetProperty("msg").GetString()!);
+            }
+
+        Assert.Equal(entryCount, seen.Count);
+        for (var i = 0; i < entryCount; i++)
+            Assert.Contains($"entry-{i:D4}", seen);
+    }
+
+    [Fact]
     public void Constructor_ThrowsOnNegativeMaxRetainedFiles()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new FileSink(LogPath(), maxRetainedFiles: -1));
+    }
+
+    [Fact]
+    public void Roll_OpenFileFailure_PropagatesExceptionInsteadOfSilentlyDropping()
+    {
+        // Pre-fix, a failed OpenFile() during Roll left _inner=null and every subsequent
+        // Write silently no-op'd. The failure must instead propagate so the logger's
+        // HandleInternalError is invoked.
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        var subdir = Path.Combine(_dir, "ro");
+        Directory.CreateDirectory(subdir);
+        var path = Path.Combine(subdir, "app.log");
+
+        using var sink = new FileSink(path, 50, 1);
+        for (var i = 0; i < 3; i++)
+            sink.Write(FixedTs, LogLevel.Info, "warmup", [], null);
+
+        // Make the directory read-only and the current file read-only. After Roll() runs:
+        //   File.Move (path → path.1) fails — directory has no write permission.
+        //   OpenFile() then fails — the existing file is read-only, Append refuses.
+        File.SetUnixFileMode(path, UnixFileMode.UserRead);
+        File.SetUnixFileMode(subdir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+        try
+        {
+            // Force enough writes to exceed maxFileSize and trigger Roll.
+            Assert.ThrowsAny<Exception>(() =>
+            {
+                for (var i = 0; i < 50; i++)
+                    sink.Write(FixedTs, LogLevel.Info, "force-roll-attempt", [], null);
+            });
+        }
+        finally
+        {
+            File.SetUnixFileMode(subdir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+    }
+
+    [Fact]
+    public void Roll_OpenFileFailure_RetryBackoffPreventsErrorSpam()
+    {
+        // While in the backoff window, subsequent writes should silently drop rather than
+        // throwing the same file-system error on every log call.
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        var subdir = Path.Combine(_dir, "ro2");
+        Directory.CreateDirectory(subdir);
+        var path = Path.Combine(subdir, "app.log");
+
+        using var sink = new FileSink(path, 50, 1);
+        for (var i = 0; i < 3; i++)
+            sink.Write(FixedTs, LogLevel.Info, "warmup", [], null);
+
+        File.SetUnixFileMode(path, UnixFileMode.UserRead);
+        File.SetUnixFileMode(subdir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+        try
+        {
+            // First failing write throws.
+            Assert.ThrowsAny<Exception>(() =>
+            {
+                for (var i = 0; i < 50; i++)
+                    sink.Write(FixedTs, LogLevel.Info, "first-burst", [], null);
+            });
+
+            // Subsequent writes during the backoff window are silent — no throw.
+            var ex = Record.Exception(() =>
+            {
+                for (var i = 0; i < 10; i++)
+                    sink.Write(FixedTs, LogLevel.Info, "while-backoff", [], null);
+            });
+            Assert.Null(ex);
+        }
+        finally
+        {
+            File.SetUnixFileMode(subdir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 
     [Fact]

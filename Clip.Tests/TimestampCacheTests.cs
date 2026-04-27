@@ -157,6 +157,33 @@ public class TimestampCacheTests
     }
 
     [Fact]
+    public void BackwardsClockStep_DoesNotReuseStaleCachedValue()
+    {
+        // A backwards clock step (NTP correction, manual time change) within the precision
+        // window must not reuse a cached "newer" timestamp for an "older" event — the cached
+        // check used signed subtraction, which made any negative delta look <precision.
+        var ms = new MemoryStream();
+        var sink = new JsonSink(ms);
+        var ts1 = new DateTimeOffset(2024, 6, 15, 10, 30, 5, TimeSpan.Zero);
+        // Step backwards by 100ms — well outside cache precision in actual time, but the
+        // signed-subtract bug would treat it as a cache hit.
+        var ts2 = ts1.AddMilliseconds(-100);
+
+        sink.Write(ts1, LogLevel.Info, "first", [], null);
+        sink.Write(ts2, LogLevel.Info, "second", [], null);
+
+        ms.Position = 0;
+        var lines = Encoding.UTF8.GetString(ms.ToArray())
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var doc1 = System.Text.Json.JsonDocument.Parse(lines[0]);
+        var doc2 = System.Text.Json.JsonDocument.Parse(lines[1]);
+        // Different physical timestamps must produce different output.
+        Assert.NotEqual(
+            doc1.RootElement.GetProperty("ts").GetString(),
+            doc2.RootElement.GetProperty("ts").GetString());
+    }
+
+    [Fact]
     public void MicrosecondCachePrecision_SubMillisecondDifference_DifferentOutput()
     {
         var ms = new MemoryStream();

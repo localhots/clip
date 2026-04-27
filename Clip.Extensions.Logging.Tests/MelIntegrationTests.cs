@@ -257,6 +257,176 @@ public class MelIntegrationTests
     }
 
     //
+    // Scope state shape variants
+    //
+
+    [Fact]
+    public void BeginScope_WithStringState_AddedAsScopeField()
+    {
+        // Non-KVP scope state takes the fallback path: a single "Scope" field is added
+        // with the raw state as the value.
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        using (logger.BeginScope("Processing batch 5"))
+            logger.LogInformation("inside scope");
+
+        var fields = sink.Records[0].Fields;
+        Assert.Contains(fields, f => f.Key == "Scope" && (string)f.RefValue! == "Processing batch 5");
+    }
+
+    [Fact]
+    public void BeginScope_WithPocoState_AddedAsSingleScopeField()
+    {
+        // An anonymous object is not IReadOnlyList<KVP>, so it goes to the fallback path.
+        // The whole POCO ends up as the value of a single "Scope" field — properties are
+        // *not* expanded individually (that would require ad-hoc reflection on the hot path).
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        using (logger.BeginScope(new { RequestId = "abc" }))
+            logger.LogInformation("inside scope");
+
+        var fields = sink.Records[0].Fields;
+        Assert.Contains(fields, f => f.Key == "Scope");
+        Assert.DoesNotContain(fields, f => f.Key == "RequestId");
+    }
+
+    //
+    // EventId edge cases
+    //
+
+    [Fact]
+    public void EventId_ZeroIdWithName_EventNameStillEmitted()
+    {
+        // EventId and EventName are independent — a caller that supplies only Name should
+        // still see the name in the output. The Id=0 case is only meaningful when *both*
+        // Id and Name are unset (the implicit default from log-macro overloads that take
+        // no EventId), which is tested via the no-EventId logger calls above.
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        logger.Log(MelLogLevel.Information, new EventId(0, "MyEvent"), "msg");
+
+        var fields = sink.Records[0].Fields;
+        Assert.DoesNotContain(fields, f => f.Key == "EventId");
+        Assert.Contains(fields, f =>
+        {
+            if (f.Key != "EventName") return false;
+            return (string)f.RefValue! == "MyEvent";
+        });
+    }
+
+    [Fact]
+    public void EventId_NonZeroIdWithoutName_OnlyEventIdEmitted()
+    {
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        logger.Log(MelLogLevel.Information, new EventId(42), "msg");
+
+        var fields = sink.Records[0].Fields;
+        Assert.Contains(fields, f => f is { Key: "EventId", IntValue: 42 });
+        Assert.DoesNotContain(fields, f => f.Key == "EventName");
+    }
+
+    [Fact]
+    public void EventId_DefaultZeroIdNullName_NeitherFieldEmitted()
+    {
+        // The implicit default — no EventId argument at all. Neither field appears.
+        var (factory, sink) = CreateFactory();
+        var logger = factory.CreateLogger("Test");
+
+        logger.LogInformation("msg");
+
+        var fields = sink.Records[0].Fields;
+        Assert.DoesNotContain(fields, f => f.Key == "EventId");
+        Assert.DoesNotContain(fields, f => f.Key == "EventName");
+    }
+
+    //
+    // External scope provider (ISupportExternalScope)
+    //
+
+    [Fact]
+    public void ExternalScope_KvpFields_VisibleInLog()
+    {
+        // The host's LoggerFactory builds a unified IExternalScopeProvider and pushes it
+        // into every ISupportExternalScope provider. Scopes pushed through the *factory*
+        // (e.g. via factory.CreateLogger(...).BeginScope, or by other providers like
+        // ASP.NET Core's HostingApplication for HTTP requests) must end up in Clip's fields.
+        var listSink = new ListSink();
+        var services = new ServiceCollection();
+        services.AddLogging(builder =>
+        {
+            builder.SetMinimumLevel(MelLogLevel.Trace);
+            builder.AddClip(opts =>
+            {
+                opts.ConfigureLogger = c => c
+                    .MinimumLevel(ClipLogLevel.Trace)
+                    .WriteTo.Sink(listSink);
+            });
+        });
+
+        var sp = services.BuildServiceProvider();
+        var factory = sp.GetRequiredService<ILoggerFactory>();
+        var logger = factory.CreateLogger("Test");
+
+        // BeginScope on the factory-produced logger flows through the unified scope provider.
+        using (logger.BeginScope(new[] { new KeyValuePair<string, object?>("RequestId", "abc-123") }))
+            logger.LogInformation("scoped");
+
+        var fields = listSink.Records[0].Fields;
+        Assert.Contains(fields, f => f.Key == "RequestId" && (string)f.RefValue! == "abc-123");
+    }
+
+    [Fact]
+    public void ExternalScope_NonKvpState_AddedAsScopeField()
+    {
+        // Non-KVP scope states (POCOs, strings) collected via the external provider must
+        // also surface — same fallback contract as ClipLogger.BeginScope.
+        var listSink = new ListSink();
+        var services = new ServiceCollection();
+        services.AddLogging(builder =>
+        {
+            builder.SetMinimumLevel(MelLogLevel.Trace);
+            builder.AddClip(opts =>
+            {
+                opts.ConfigureLogger = c => c
+                    .MinimumLevel(ClipLogLevel.Trace)
+                    .WriteTo.Sink(listSink);
+            });
+        });
+
+        var factory = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>();
+        var logger = factory.CreateLogger("Test");
+
+        using (logger.BeginScope("processing-batch-5"))
+            logger.LogInformation("scoped");
+
+        var fields = listSink.Records[0].Fields;
+        Assert.Contains(fields, f =>
+            f.Key == "Scope" && (string)f.RefValue! == "processing-batch-5");
+    }
+
+    [Fact]
+    public void NoExternalScopeProvider_DirectProviderUse_DoesNotCrash()
+    {
+        // Constructing the provider directly (without going through LoggerFactory) leaves
+        // _scopeProvider null. The Log path must take the fast no-scope branch and not NRE.
+        var listSink = new ListSink();
+        var clip = Logger.Create(c => c
+            .MinimumLevel(ClipLogLevel.Trace)
+            .WriteTo.Sink(listSink));
+        using var provider = new ClipLoggerProvider(clip);
+        var logger = provider.CreateLogger("Test");
+
+        var ex = Record.Exception(() => logger.LogInformation("no scope provider"));
+        Assert.Null(ex);
+        Assert.Single(listSink.Records);
+    }
+
+    //
     // Nested scopes
     //
 

@@ -13,7 +13,7 @@ public sealed class JsonSink : ILogSink
     private readonly Stream _output;
     private readonly bool _ownsStream;
     private readonly byte[][] _labelBytes;
-    private readonly LogBuffer _buffer = new();
+    private readonly LogBuffer _buffer;
     private readonly TimestampCache _tsCache;
     private readonly Lock _lock = new();
     private readonly byte[] _openTsPrefix;
@@ -21,6 +21,7 @@ public sealed class JsonSink : ILogSink
     private readonly byte[] _msgPrefix;
     private readonly byte[]? _fieldsPrefix;
     private readonly byte[] _errorPrefix;
+    private readonly int _maxInnerExceptionDepth;
 
     public JsonSink(JsonFormatConfig config, Stream? output = null)
     {
@@ -44,6 +45,8 @@ public sealed class JsonSink : ILogSink
             ? Encoding.UTF8.GetBytes($",\"{esc(config.FieldsKey)}\":{{")
             : null;
         _errorPrefix = Encoding.UTF8.GetBytes($",\"{esc(config.ErrorKey)}\":");
+        _maxInnerExceptionDepth = config.MaxInnerExceptionDepth;
+        _buffer = new LogBuffer(config.MaxLogEntryBytes);
     }
 
     public JsonSink(Stream? output = null)
@@ -64,6 +67,10 @@ public sealed class JsonSink : ILogSink
             _buffer.WriteBytes(_labelBytes[(int)level]);
             _buffer.WriteBytes(_msgPrefix);
             _buffer.WriteJsonString(message);
+            // Safe-point boundaries are at the outer-object level: positions where a
+            // closing `,"truncated":true}\n` would produce valid JSON. Mark after each
+            // complete top-level element.
+            _buffer.MarkSafePoint();
 
             if (fields.Length > 0)
             {
@@ -79,6 +86,7 @@ public sealed class JsonSink : ILogSink
                         WriteFieldValue(_buffer, in fields[i]);
                     }
                     _buffer.WriteByte((byte)'}');
+                    _buffer.MarkSafePoint();
                 }
                 else
                 {
@@ -86,6 +94,9 @@ public sealed class JsonSink : ILogSink
                     {
                         _buffer.WriteJsonFieldPrefix(fields[i].Key);
                         WriteFieldValue(_buffer, in fields[i]);
+                        // Each field is a complete `,"k":v` at outer-object level —
+                        // saturating mid-value rewinds to the previous field.
+                        _buffer.MarkSafePoint();
                     }
                 }
             }
@@ -94,9 +105,22 @@ public sealed class JsonSink : ILogSink
             {
                 _buffer.WriteBytes(_errorPrefix);
                 WriteException(_buffer, exception);
+                _buffer.MarkSafePoint();
             }
 
-            _buffer.WriteBytes("}\n"u8);
+            // If any write hit the size cap, the partial entry isn't a closed object.
+            // Rewind to the last safe point and append a closing marker so we ship
+            // everything up to the last complete element rather than throwing it away.
+            if (_buffer.Saturated)
+            {
+                _buffer.RewindToSafePoint();
+                _buffer.WriteMarker(",\"truncated\":true}\n"u8);
+            }
+            else
+            {
+                _buffer.WriteBytes("}\n"u8);
+            }
+
             _output.Write(_buffer.WrittenSpan);
         }
     }
@@ -134,7 +158,7 @@ public sealed class JsonSink : ILogSink
         }
     }
 
-    private static void WriteException(LogBuffer buf, Exception ex)
+    private void WriteException(LogBuffer buf, Exception ex, int depth = 0)
     {
         buf.WriteBytes("{\"type\":"u8);
         buf.WriteJsonString(ex.GetType().FullName ?? ex.GetType().Name);
@@ -167,7 +191,10 @@ public sealed class JsonSink : ILogSink
         if (ex.InnerException != null)
         {
             buf.WriteBytes(",\"inner\":"u8);
-            WriteException(buf, ex.InnerException);
+            if (depth + 1 >= _maxInnerExceptionDepth)
+                buf.WriteBytes("{\"truncated\":true}"u8);
+            else
+                WriteException(buf, ex.InnerException, depth + 1);
         }
 
         buf.WriteByte((byte)'}');

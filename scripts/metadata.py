@@ -169,7 +169,7 @@ DESCRIPTIONS = {
     ),
     "code": (
       "// Clip\n"
-      'var logger = Logger.Create(c => c\n'
+      "var logger = Logger.Create(c => c\n"
       '    .Enrich.Field("app", "benchmark")\n'
       "    .WriteTo.Console());\n"
       'logger.Info("Request handled", new { Method, Status, Elapsed });'
@@ -182,7 +182,7 @@ DESCRIPTIONS = {
     ),
     "code": (
       "// Clip\n"
-      'var logger = Logger.Create(c => c\n'
+      "var logger = Logger.Create(c => c\n"
       '    .Filter.Fields("password")\n'
       "    .WriteTo.Console());\n"
       'logger.Info("Request handled", new { Method, Status, password = "secret" });'
@@ -195,7 +195,7 @@ DESCRIPTIONS = {
     ),
     "code": (
       "// Clip\n"
-      'var logger = Logger.Create(c => c\n'
+      "var logger = Logger.Create(c => c\n"
       '    .Redact.Fields("Token")\n'
       "    .WriteTo.Console());\n"
       'logger.Info("Request handled", new { Method, Status, Token = "bearer-abc" });'
@@ -207,7 +207,7 @@ DESCRIPTIONS = {
       " filter removes `password`, redactor replaces `Token` with `***`."
     ),
     "code": (
-      'var logger = Logger.Create(c => c\n'
+      "var logger = Logger.Create(c => c\n"
       '    .Enrich.Field("app", "benchmark")\n'
       '    .Filter.Fields("password")\n'
       '    .Redact.Fields("Token")\n'
@@ -810,7 +810,7 @@ CAVEATS = {
     {
       "logger": "Clip",
       "text": (
-        "Enricher configured via `.Enrich.Field(\"app\", \"benchmark\")`."
+        'Enricher configured via `.Enrich.Field("app", "benchmark")`.'
         " The field is added to the internal field list on every call."
         " Enricher fields have the lowest priority — call-site and"
         " context fields override them on key collision."
@@ -819,7 +819,7 @@ CAVEATS = {
     {
       "logger": "Serilog",
       "text": (
-        "Enricher configured via `.Enrich.WithProperty(\"app\", \"benchmark\")`."
+        'Enricher configured via `.Enrich.WithProperty("app", "benchmark")`.'
         " The property is added to every `LogEvent` object at construction"
         " time. No level gating — the enricher runs on every enabled call."
       ),
@@ -840,7 +840,7 @@ CAVEATS = {
     {
       "logger": "Clip",
       "text": (
-        "Filter configured via `.Filter.Fields(\"password\")`."
+        'Filter configured via `.Filter.Fields("password")`.'
         " Each field key is checked against a hash set. Filtered"
         " fields never reach redactors or sinks."
       ),
@@ -861,7 +861,7 @@ CAVEATS = {
     {
       "logger": "Clip",
       "text": (
-        "Redactor configured via `.Redact.Fields(\"Token\")`."
+        'Redactor configured via `.Redact.Fields("Token")`.'
         " Each field is checked by key (case-insensitive) and"
         " matching values are replaced with `***`. Runs after"
         " filtering — filtered fields are never redacted."
@@ -946,6 +946,20 @@ FEATURE_TABLES = [
       ("mel_adapter", "MEL Adapter"),
     ],
   ),
+  (
+    "Hardening",
+    [
+      ("sanitize_controls", "Strips Control Chars / ANSI"),
+      ("inner_exception_cap", "InnerException Recursion Cap"),
+      ("entry_size_cap", "Per-Entry Size Cap"),
+      ("async_overflow_policy", "Async Queue Overflow Policy"),
+      ("sink_failure_isolation", "Sink Failure Isolation"),
+      ("self_log_channel", "Self-Log Channel"),
+      ("reentrancy_guard", "Reentrancy Guard"),
+      ("first_party_redaction", "First-Party Redaction"),
+      ("logging_analyzers", "Compile-Time Analyzers"),
+    ],
+  ),
 ]
 
 FEATURES = {
@@ -969,6 +983,15 @@ FEATURES = {
     "buffer_pooling": True,
     "zero_deps": True,
     "mel_adapter": True,
+    "sanitize_controls": True,
+    "inner_exception_cap": "✅ 32",
+    "entry_size_cap": "✅ 4 MiB",
+    "async_overflow_policy": "DropOldest 1024",
+    "sink_failure_isolation": True,
+    "self_log_channel": True,
+    "reentrancy_guard": True,
+    "first_party_redaction": True,
+    "logging_analyzers": "✅ 9 rules",
   },
   "Serilog": {
     "structured": True,
@@ -990,6 +1013,15 @@ FEATURES = {
     "buffer_pooling": False,
     "zero_deps": False,
     "mel_adapter": True,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": False,
+    "async_overflow_policy": "Drop 10k",
+    "sink_failure_isolation": True,
+    "self_log_channel": True,
+    "reentrancy_guard": False,
+    "first_party_redaction": False,
+    "logging_analyzers": "3rd-party",
   },
   "NLog": {
     "structured": True,
@@ -1011,6 +1043,15 @@ FEATURES = {
     "buffer_pooling": True,
     "zero_deps": True,
     "mel_adapter": True,
+    "sanitize_controls": False,
+    "inner_exception_cap": "✅ 0¹",
+    "entry_size_cap": False,
+    "async_overflow_policy": "Discard 10k",
+    "sink_failure_isolation": "⚠️⁴",
+    "self_log_channel": True,
+    "reentrancy_guard": False,
+    "first_party_redaction": False,
+    "logging_analyzers": False,
   },
   "MEL": {
     "structured": True,
@@ -1032,6 +1073,15 @@ FEATURES = {
     "buffer_pooling": False,
     "zero_deps": False,
     "mel_adapter": False,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": False,
+    "async_overflow_policy": "Wait 2.5k",
+    "sink_failure_isolation": "⚠️⁵",
+    "self_log_channel": "⚠️⁷",
+    "reentrancy_guard": False,
+    "first_party_redaction": "✅ .NET 8+¹⁰",
+    "logging_analyzers": "✅ SYSLIB1xxx",
   },
   "ZLogger": {
     "structured": True,
@@ -1053,6 +1103,15 @@ FEATURES = {
     "buffer_pooling": True,
     "zero_deps": False,
     "mel_adapter": False,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": False,
+    "async_overflow_policy": "Grow ∞³",
+    "sink_failure_isolation": "⚠️⁸",
+    "self_log_channel": "⚠️⁸",
+    "reentrancy_guard": False,
+    "first_party_redaction": False,
+    "logging_analyzers": False,
   },
   "Log4Net": {
     "structured": False,
@@ -1074,6 +1133,15 @@ FEATURES = {
     "buffer_pooling": False,
     "zero_deps": False,
     "mel_adapter": True,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": False,
+    "async_overflow_policy": False,
+    "sink_failure_isolation": "⚠️⁶",
+    "self_log_channel": True,
+    "reentrancy_guard": True,
+    "first_party_redaction": False,
+    "logging_analyzers": False,
   },
   "ZeroLog": {
     "structured": True,
@@ -1095,6 +1163,15 @@ FEATURES = {
     "buffer_pooling": True,
     "zero_deps": False,
     "mel_adapter": False,
+    "sanitize_controls": False,
+    "inner_exception_cap": False,
+    "entry_size_cap": "✅ 128 B²",
+    "async_overflow_policy": "Drop 1k",
+    "sink_failure_isolation": True,
+    "self_log_channel": "⚠️⁹",
+    "reentrancy_guard": False,
+    "first_party_redaction": False,
+    "logging_analyzers": False,
   },
 }
 

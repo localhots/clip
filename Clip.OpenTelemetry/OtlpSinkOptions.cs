@@ -92,8 +92,17 @@ public sealed class OtlpSinkOptions
         foreach (var pair in input.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             var eqIdx = pair.IndexOf('=');
-            if (eqIdx > 0)
-                target[pair[..eqIdx].Trim()] = pair[(eqIdx + 1)..].Trim();
+            if (eqIdx <= 0)
+                continue;
+            var key = pair[..eqIdx].Trim();
+            var value = pair[(eqIdx + 1)..].Trim();
+            // Reject CR/LF: with HTTP TryAddWithoutValidation these could splice
+            // additional headers into the outbound request.
+            if (key.AsSpan().IndexOfAny('\r', '\n') >= 0)
+                continue;
+            if (value.AsSpan().IndexOfAny('\r', '\n') >= 0)
+                continue;
+            target[key] = value;
         }
     }
 }

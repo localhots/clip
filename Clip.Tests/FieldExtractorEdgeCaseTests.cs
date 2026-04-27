@@ -1,5 +1,6 @@
 using System.Collections;
 using Clip.Fields;
+using Clip.Sinks;
 
 namespace Clip.Tests;
 
@@ -248,5 +249,44 @@ public class FieldExtractorEdgeCaseTests
 
     private class EmptyHolder
     {
+    }
+
+    //
+    // Property getter throws
+    //
+
+    [Fact]
+    public void PropertyGetter_Throws_PropagatesToCaller()
+    {
+        // FieldExtractor does not catch property-getter exceptions. The pipeline relies on
+        // Logger.LogErgonomicImpl's outer try/catch + HandleInternalError to keep the app
+        // alive. Document this contract: an exception from the getter must propagate, not
+        // be silently swallowed (which would emit a partial Field[] under unclear semantics).
+        var list = new List<Field>();
+        Assert.Throws<InvalidOperationException>(
+            () => FieldExtractor.ExtractInto(new ThrowingPropertyHolder(), list));
+    }
+
+    [Fact]
+    public void PropertyGetter_Throws_LoggerStillEmitsViaInternalErrorHandler()
+    {
+        // End-to-end: a thrown getter on the call-site fields must be caught at the Logger
+        // boundary, surfaced via OnInternalError, and not crash the application. The log
+        // entry itself is dropped (correctly — we have no usable fields to emit).
+        var captured = new List<Exception>();
+        using var logger = Logger.Create(c => c
+            .OnInternalError(captured.Add)
+            .MinimumLevel(LogLevel.Trace)
+            .WriteTo.Sink(new ListSink()));
+
+        var ex = Record.Exception(() => logger.Info("oops", new ThrowingPropertyHolder()));
+        Assert.Null(ex);
+        Assert.Single(captured);
+        Assert.IsType<InvalidOperationException>(captured[0]);
+    }
+
+    private class ThrowingPropertyHolder
+    {
+        public string Bad => throw new InvalidOperationException("getter exploded");
     }
 }

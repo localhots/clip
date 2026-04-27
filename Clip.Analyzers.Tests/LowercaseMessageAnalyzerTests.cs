@@ -74,4 +74,51 @@ public class LowercaseMessageAnalyzerTests
                             """;
         await Verify.VerifyAnalyzerAsync(test);
     }
+
+    [Fact]
+    public async Task NonAsciiLowercaseStart_Diagnostic()
+    {
+        // char.IsLower returns true for Unicode lowercase too — German "über" should be
+        // flagged just like ASCII "user".
+        const string test = """
+                            using Clip;
+                            class C {
+                                void M(ILogger logger) {
+                                    logger.Info({|#0:"über die brücke"|});
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test,
+            Verify.Diagnostic(DiagnosticIds.LowercaseMessage).WithLocation(0));
+    }
+
+    [Fact]
+    public async Task NonAsciiUppercaseStart_NoDiagnostic()
+    {
+        // Already capitalized — no diagnostic.
+        const string test = """
+                            using Clip;
+                            class C {
+                                void M(ILogger logger) {
+                                    logger.Info("Über die Brücke");
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test);
+    }
+
+    [Fact]
+    public async Task SymbolStartMessage_NoDiagnostic()
+    {
+        // Punctuation isn't lowercase — no diagnostic.
+        const string test = """
+                            using Clip;
+                            class C {
+                                void M(ILogger logger) {
+                                    logger.Info("[startup] ready");
+                                }
+                            }
+                            """;
+        await Verify.VerifyAnalyzerAsync(test);
+    }
 }

@@ -33,6 +33,7 @@ public sealed class OtlpSink : ILogSink
     private readonly CancellationTokenSource _cts = new();
     private long _rejectedRecords;
     private long _failedExports;
+    private bool _disposed;
 
     /// <summary>Total number of log records rejected by the collector via partial success responses.</summary>
     public long RejectedRecords => Interlocked.Read(ref _rejectedRecords);
@@ -318,19 +319,29 @@ public sealed class OtlpSink : ILogSink
 
     public void Dispose()
     {
+        // Idempotent: a second call (e.g. Logger.Dispose offloaded by Fatal racing a user
+        // Dispose) must not throw via _cts.Cancel() on a disposed CTS.
+        if (_disposed) return;
+        _disposed = true;
+
         _channel.Writer.TryComplete();
         _cts.Cancel();
 
+        var drained = false;
         try
         {
-            _exportTask.Wait(TimeSpan.FromSeconds(5));
+            drained = _exportTask.Wait(TimeSpan.FromSeconds(5));
         }
         catch
         {
             // Export loop may fault during cancellation — safe to ignore on disposal.
         }
 
-        _exporter.Dispose();
+        // Same race as BackgroundSink: if the drain didn't finish, the export task may
+        // still be in `await _exporter.ExportAsync(...)`. Disposing the exporter under it
+        // can corrupt in-flight requests. Leak the exporter rather than risk that.
+        if (drained)
+            _exporter.Dispose();
         _cts.Dispose();
     }
 

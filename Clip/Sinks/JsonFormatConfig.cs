@@ -19,6 +19,21 @@ public sealed class JsonFormatConfig
     public string? FieldsKey { get; init; }
     public string ErrorKey { get; init; } = "error";
 
+    /// <summary>
+    /// Maximum <see cref="Exception.InnerException"/> chain depth to render. Beyond this,
+    /// a truncation sentinel (<c>{"truncated":true}</c>) is emitted instead of recursing.
+    /// Caps stack usage on pathologically deep chains. Default 32.
+    /// </summary>
+    public int MaxInnerExceptionDepth { get; init; } = 32;
+
+    /// <summary>
+    /// Maximum bytes a single rendered log entry may occupy. When a log call would push
+    /// past this, the partial entry is discarded and a small fixed JSON object
+    /// (<c>{"ts":..., "level":..., "msg":"&lt;log entry truncated&gt;", "truncated":true}</c>)
+    /// is emitted instead — keeping the output line valid JSON. Default 4 MiB.
+    /// </summary>
+    public int MaxLogEntryBytes { get; init; } = 4 * 1024 * 1024;
+
     public IReadOnlyList<string> LevelLabels
     {
         get => _levelLabels;
