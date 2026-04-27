@@ -63,6 +63,13 @@ public class JsonBenchmarks : BenchmarkBase
         MelSourceGen.LogRequestHandled(MelJson);
     }
 
+    [Benchmark]
+    [BenchmarkCategory("Json_NoFields")]
+    public void NoFields_ClipMEL()
+    {
+        ClipMelJson.LogInformation("Request handled");
+    }
+
 
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Json_FiveFields")]
@@ -126,6 +133,15 @@ public class JsonBenchmarks : BenchmarkBase
         MelSourceGen.LogRequestHandledFields(MelJson, Method, Status, Elapsed, ReqId, Amount);
     }
 
+    [Benchmark]
+    [BenchmarkCategory("Json_FiveFields")]
+    public void FiveFields_ClipMEL()
+    {
+        ClipMelJson.LogInformation(
+            "Request handled {Method} {Status} {Elapsed} {RequestId} {Amount}",
+            Method, Status, Elapsed, ReqId, Amount);
+    }
+
 
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Json_WithException")]
@@ -182,6 +198,14 @@ public class JsonBenchmarks : BenchmarkBase
         MelSourceGen.LogConnectionFailed(MelJson, SampleException, Host, Port);
     }
 
+    [Benchmark]
+    [BenchmarkCategory("Json_WithException")]
+    public void WithException_ClipMEL()
+    {
+        ClipMelJson.LogError(SampleException,
+            "Connection failed {Host} {Port}", Host, Port);
+    }
+
 
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Json_WithContext")]
@@ -232,7 +256,7 @@ public class JsonBenchmarks : BenchmarkBase
     public void WithContext_ZLogger()
     {
         using (ZloggerJson.BeginScope(new KeyValuePair<string, object?>[]
-        { new("RequestId", RequestId), new("UserId", UserId) }))
+                   { new("RequestId", RequestId), new("UserId", UserId) }))
         {
             ZloggerJson.ZLogInformation($"Processing {Step}");
         }
@@ -243,7 +267,7 @@ public class JsonBenchmarks : BenchmarkBase
     public void WithContext_MEL()
     {
         using (MelJson.BeginScope(new KeyValuePair<string, object?>[]
-        { new("RequestId", RequestId), new("UserId", UserId) }))
+                   { new("RequestId", RequestId), new("UserId", UserId) }))
         {
             MelJson.LogInformation("Processing {Step}", Step);
         }
@@ -254,9 +278,20 @@ public class JsonBenchmarks : BenchmarkBase
     public void WithContext_MELSrcGen()
     {
         using (MelJson.BeginScope(new KeyValuePair<string, object?>[]
-        { new("RequestId", RequestId), new("UserId", UserId) }))
+                   { new("RequestId", RequestId), new("UserId", UserId) }))
         {
             MelSourceGen.LogProcessing(MelJson, Step);
+        }
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Json_WithContext")]
+    public void WithContext_ClipMEL()
+    {
+        using (ClipMelJson.BeginScope(new KeyValuePair<string, object?>[]
+                   { new("RequestId", RequestId), new("UserId", UserId) }))
+        {
+            ClipMelJson.LogInformation("Processing {Step}", Step);
         }
     }
 }

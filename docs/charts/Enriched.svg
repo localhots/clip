@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="600" height="116"
+     viewBox="0 0 600 116"
+     font-family="system-ui, -apple-system, sans-serif">
+  <rect width="600" height="116" fill="white"/>
+  <text x="82" y="16.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">Clip</text>
+  <rect x="90" y="4" width="113.8" height="24" rx="2" fill="#0077b6"/>
+  <text x="197.8004865421202" y="16.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">149 ns  (40 B)</text>
+  <text x="82" y="44.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">ClipZero</text>
+  <rect x="90" y="32" width="111.0" height="24" rx="2" fill="#00a0c4"/>
+  <text x="194.95031656426409" y="44.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">145 ns</text>
+  <text x="82" y="72.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">Serilog</text>
+  <rect x="90" y="60" width="490.0" height="24" rx="2" fill="#e63946"/>
+  <text x="574.0" y="72.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">641 ns  (1136 B)</text>
+  <text x="82" y="100.0" text-anchor="end" dominant-baseline="central" font-size="12" fill="#374151">NLog</text>
+  <rect x="90" y="88" width="465.5" height="24" rx="2" fill="#f4a261"/>
+  <text x="549.4946511555376" y="100.0" text-anchor="end" dominant-baseline="central" font-size="11" fill="white">609 ns  (1248 B)</text>
+</svg>

@@ -25,18 +25,25 @@ from metadata import (
 )
 from benchdb_reader import load_db, load_class_rows, get_environment
 
-DB_PATH = Path("tmp/benchdb.json")
+DB_PATH = Path("docs/benchdb.json")
 OUTPUT_FILE = Path("docs/COMPARE.md")
-CHARTS_DIR = Path("tmp/charts")
+CHARTS_DIR = Path("docs/charts")
 
 CATEGORY_TITLES = {
   "NoFields": "No Fields",
   "FiveFields": "Five Fields",
   "WithException": "With Exception",
   "WithContext": "With Context",
+  "Enriched": "Enriched",
+  "FieldFiltered": "Field Filtered",
+  "Redacted": "Redacted",
+  "FullPipeline": "Full Pipeline",
 }
 
-CATEGORY_ORDER = ["NoFields", "FiveFields", "WithContext", "WithException"]
+CATEGORY_ORDER = [
+  "NoFields", "FiveFields", "WithContext", "WithException",
+  "Enriched", "FieldFiltered", "Redacted", "FullPipeline",
+]
 
 CLIP_NAMES = {"Clip", "ClipZero", "ClipMEL"}
 
@@ -70,8 +77,11 @@ def emit_filtered(rows: list[dict[str, str]]) -> list[str]:
     out += ["```csharp", code, "```", ""]
   out += _chart_ref("Filtered")
   out += [
-    "| Logger | Mean | Allocated |",
-    "|--------|-----:|----------:|",
+    "<details>",
+    "<summary>Benchmark data</summary>",
+    "",
+    "| Logger | Mean | Error | StdDev | Allocated |",
+    "|--------|-----:|------:|-------:|----------:|",
   ]
   pending = []
   for r in rows:
@@ -81,10 +91,13 @@ def emit_filtered(rows: list[dict[str, str]]) -> list[str]:
     name = strip_prefix(method, "Filtered")
     display = bold_clip(name)
     mean = r.get("Mean", "")
+    error = r.get("Error", "")
+    stddev = r.get("StdDev", "")
     alloc = fmt_alloc(r.get("Allocated", ""))
-    pending.append((name, f"| {display} | {mean} | {alloc} |"))
+    pending.append((name, f"| {display} | {mean} | {error} | {stddev} | {alloc} |"))
   pending.sort(key=lambda e: _LOGGER_RANK.get(e[0], len(LOGGER_ORDER)))
   out.extend(row for _, row in pending)
+  out += ["", "</details>"]
   out += render_caveats("Filtered")
   return out
 
@@ -121,9 +134,14 @@ def emit_comparison(rows: list[dict[str, str]], section: str, desc: str) -> list
     if current_cat is None:
       return
     out.extend(_chart_ref(current_cat))
+    out.append("<details>")
+    out.append("<summary>Benchmark data</summary>")
+    out.append("")
     out.extend(table_header)
     pending.sort(key=lambda e: _LOGGER_RANK.get(e[0], len(LOGGER_ORDER)))
     out.extend(row for _, row in pending)
+    out.append("")
+    out.append("</details>")
     out.extend(render_caveats(current_cat))
     pending = []
 
@@ -150,8 +168,8 @@ def emit_comparison(rows: list[dict[str, str]], section: str, desc: str) -> list
       if sub_code:
         out += ["```csharp", sub_code, "```", ""]
       table_header = [
-        "| Logger | Mean | vs Clip | Allocated |",
-        "|--------|-----:|--------:|----------:|",
+        "| Logger | Mean | Error | StdDev | vs Clip | Allocated |",
+        "|--------|-----:|------:|-------:|--------:|----------:|",
       ]
 
     name = strip_prefix(method, cat)
@@ -159,9 +177,11 @@ def emit_comparison(rows: list[dict[str, str]], section: str, desc: str) -> list
       continue
     display = bold_clip(name)
     mean = r.get("Mean", "")
+    error = r.get("Error", "")
+    stddev = r.get("StdDev", "")
     ratio = r.get("Ratio", "")
     alloc = fmt_alloc(r.get("Allocated", ""))
-    pending.append((name, f"| {display} | {mean} | {ratio} | {alloc} |"))
+    pending.append((name, f"| {display} | {mean} | {error} | {stddev} | {ratio} | {alloc} |"))
 
   flush_cat()
   return out
@@ -201,7 +221,7 @@ def generate(db: dict) -> str:
     '    new Field("Amount", Amount));',
     "```",
     "",
-    "This report puts Clip head-to-head against six established .NET loggers,"
+    "This report puts Clip head-to-head against eight other .NET loggers,"
     " all writing to `Stream.Null` so we measure pure formatting cost:",
     "",
     "- **Serilog** — rich sink ecosystem and message templates."
@@ -215,8 +235,8 @@ def generate(db: dict) -> str:
     " Same MEL pipeline underneath — this is how Microsoft recommends"
     " using MEL in hot paths.",
     "- **ZLogger** — Cysharp's high-performance logger built on MEL."
-    " Defers *all* formatting to a background thread — benchmarks"
-    " only reflect enqueue cost.",
+    " Defers formatting to a background thread — under sustained"
+    " load, backpressure adds cost on the calling thread.",
     "- **log4net** — the port of Java's Log4j."
     " No structured fields, pattern layouts all the way down.",
     "- **ClipMEL** — Clip behind MEL's `ILogger` via"
@@ -276,6 +296,17 @@ def generate(db: dict) -> str:
       rows,
       "JSON",
       get_description("Json"),
+    )
+
+  lines += ["", "---"]
+
+  # Pipeline
+  rows = load_class_rows("PipelineBenchmarks", db)
+  if rows:
+    lines += emit_comparison(
+      rows,
+      "Pipeline",
+      get_description("Pipeline"),
     )
 
   return "\n".join(lines) + "\n"

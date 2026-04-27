@@ -7,6 +7,8 @@
 .PHONY: setup clean
 
 BENCH_PROJECT := Clip.Benchmarks
+BENCH_ALL := '*ConsoleBenchmarks*' '*JsonBenchmarks*' '*FilteredBenchmarks*' '*PipelineBenchmarks*'
+FILTER ?= $(BENCH_ALL)
 
 ## Show all targets with descriptions
 help:
@@ -35,15 +37,15 @@ format-cs:
 format-py:
 	uv run ruff format scripts/
 
-## Run fast benchmarks — all loggers (~40 min, 5 data points)
+## Run fast benchmarks (FILTER= to select, default all)
 bench:
-	BENCH_MODE=fast dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*ConsoleBenchmarks*' '*JsonBenchmarks*' '*FilteredBenchmarks*'
+	BENCH_MODE=fast dotnet run -c Release --project $(BENCH_PROJECT) -- --filter $(FILTER)
 	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
-## Run full benchmarks — all loggers (~1h45m, 50 data points)
+## Run full benchmarks (FILTER= to select, default all)
 bench-full:
-	BENCH_MODE=full dotnet run -c Release --project $(BENCH_PROJECT) -- --filter '*ConsoleBenchmarks*' '*JsonBenchmarks*' '*FilteredBenchmarks*'
+	BENCH_MODE=full dotnet run -c Release --project $(BENCH_PROJECT) -- --filter $(FILTER)
 	@rm -f tmp/BenchmarkDotNet.Artifacts/*.log
 	@$(MAKE) bench-update
 
@@ -126,4 +128,4 @@ setup:
 ## Remove build artifacts and benchmark results
 clean:
 	dotnet clean -c Release --nologo -v q
-	rm -rf tmp/BenchmarkDotNet.Artifacts tmp/BenchmarkDotNet.AsmArtifacts tmp/charts
+	rm -rf tmp/BenchmarkDotNet.Artifacts tmp/BenchmarkDotNet.AsmArtifacts

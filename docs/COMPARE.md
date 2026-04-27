@@ -2,7 +2,7 @@
 
 BenchmarkDotNet v0.15.8, macOS Tahoe 26.3.1 (25D2128) [Darwin 25.3.0]  
 Apple M5, 1 CPU, 10 logical and 10 physical cores  
-Run: 2026-03-25 23:27
+Run: 2026-03-27 11:48
 
 Clip is a zero-dependency structured logging library for .NET 9. It formats directly into pooled UTF-8 byte buffers — no intermediate strings, no allocations on the hot path, no background-thread tricks to hide latency.
 
@@ -22,13 +22,13 @@ logger.Info("Request handled",
     new Field("Amount", Amount));
 ```
 
-This report puts Clip head-to-head against six established .NET loggers, all writing to `Stream.Null` so we measure pure formatting cost:
+This report puts Clip head-to-head against eight other .NET loggers, all writing to `Stream.Null` so we measure pure formatting cost:
 
 - **Serilog** — rich sink ecosystem and message templates. Allocates a `LogEvent` and boxes value types per call.
 - **NLog** — layout renderers give surgical control over output. String-based rendering with per-call allocations.
 - **MEL** (Microsoft.Extensions.Logging) — ships with ASP.NET Core. Virtual dispatch, provider iteration, background I/O thread.
 - **MELSrcGen** — MEL with `[LoggerMessage]` source generation. Eliminates runtime template parsing and value-type boxing. Same MEL pipeline underneath — this is how Microsoft recommends using MEL in hot paths.
-- **ZLogger** — Cysharp's high-performance logger built on MEL. Defers *all* formatting to a background thread — benchmarks only reflect enqueue cost.
+- **ZLogger** — Cysharp's high-performance logger built on MEL. Defers formatting to a background thread — under sustained load, backpressure adds cost on the calling thread.
 - **log4net** — the port of Java's Log4j. No structured fields, pattern layouts all the way down.
 - **ClipMEL** — Clip behind MEL's `ILogger` via `Clip.Extensions.Logging`. Shows MEL abstraction cost.
 - **ZeroLog** — Abc-Arbitrage's zero-allocation logger. Builder API, synchronous mode — measures full formatting cost.
@@ -45,10 +45,10 @@ This report puts Clip head-to-head against six established .NET loggers, all wri
 
 | Pipeline | Clip | Serilog | NLog | MEL | ZLogger | Log4Net | ZeroLog |
 |---------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Enrichers | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| Enrichers | ✅ | ✅ | ✅ | — | — | — | — |
 | Level-Gated Enrichers | ✅ | ✅ | — | — | — | — | — |
 | Filters | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Redactors | ✅ | — | — | ✅ | — | — | — |
+| Redactors | ✅ | — | — | — | — | — | — |
 | Scoped Context | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
 
 | Output | Clip | Serilog | NLog | MEL | ZLogger | Log4Net | ZeroLog |
@@ -77,20 +77,25 @@ Debug call at Info minimum level — measures the cost of checking the level and
 logger.Debug("This is filtered out");
 ```
 
-![Filtered](tmp/charts/Filtered.svg)
+![Filtered](docs/charts/Filtered.svg)
 
-| Logger | Mean | Allocated |
-|--------|-----:|----------:|
-| **Clip** | 0.0000 ns | - |
-| **ClipZero** | 0.0000 ns | - |
-| **ClipMEL** | 5.2927 ns | - |
-| MEL | 5.2687 ns | - |
-| MELSrcGen | 0.6043 ns | - |
-| Serilog | 0.5558 ns | - |
-| ZLogger | 2.5100 ns | - |
-| NLog | 0.0000 ns | - |
-| Log4Net | 3.5907 ns | - |
-| ZeroLog | 0.4398 ns | - |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | Allocated |
+|--------|-----:|------:|-------:|----------:|
+| **Clip** | 0.0000 ns | 0.0000 ns | 0.0000 ns | - |
+| **ClipZero** | 0.0000 ns | 0.0000 ns | 0.0000 ns | - |
+| **ClipMEL** | 5.1697 ns | 0.0136 ns | 0.0273 ns | - |
+| MEL | 4.8919 ns | 0.0074 ns | 0.0145 ns | - |
+| MELSrcGen | 0.4775 ns | 0.0002 ns | 0.0004 ns | - |
+| Serilog | 0.5219 ns | 0.0057 ns | 0.0113 ns | - |
+| ZLogger | 3.0037 ns | 0.0013 ns | 0.0026 ns | - |
+| NLog | 0.0000 ns | 0.0000 ns | 0.0000 ns | - |
+| Log4Net | 2.9125 ns | 0.0004 ns | 0.0008 ns | - |
+| ZeroLog | 0.3273 ns | 0.0055 ns | 0.0112 ns | - |
+
+</details>
 
 > **Clip:** Single integer comparison, inlined by the JIT.
 
@@ -154,20 +159,25 @@ Message only, no structured fields attached.
 logger.Info("Request handled");
 ```
 
-![Console_NoFields](tmp/charts/Console_NoFields.svg)
+![Console_NoFields](docs/charts/Console_NoFields.svg)
 
-| Logger | Mean | vs Clip | Allocated |
-|--------|-----:|--------:|----------:|
-| **Clip** | 26.01 ns | 1.00 | - |
-| **ClipZero** | 26.05 ns | 1.00 | - |
-| **ClipMEL** | 60.26 ns | 2.32 | 64 B |
-| MEL | 397.58 ns | 15.29 | 352 B |
-| MELSrcGen | 469.05 ns | 18.03 | 368 B |
-| Serilog | 284.84 ns | 10.95 | 416 B |
-| ZLogger | 289.82 ns | 11.14 | - |
-| NLog | 160.99 ns | 6.19 | 304 B |
-| Log4Net | 188.63 ns | 7.25 | 392 B |
-| ZeroLog | 116.85 ns | 4.49 | - |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 26.42 ns | 0.020 ns | 0.040 ns | 1.00 | - |
+| **ClipZero** | 26.44 ns | 0.020 ns | 0.039 ns | 1.00 | - |
+| **ClipMEL** | 57.54 ns | 0.042 ns | 0.084 ns | 2.18 | 64 B |
+| MEL | 372.86 ns | 5.612 ns | 11.337 ns | 14.11 | 304 B |
+| MELSrcGen | 375.11 ns | 8.219 ns | 16.603 ns | 14.20 | 320 B |
+| Serilog | 276.33 ns | 0.473 ns | 0.945 ns | 10.46 | 416 B |
+| ZLogger | 341.99 ns | 0.410 ns | 0.810 ns | 12.94 | - |
+| NLog | 143.87 ns | 0.256 ns | 0.518 ns | 5.45 | 304 B |
+| Log4Net | 181.89 ns | 0.243 ns | 0.491 ns | 6.88 | 392 B |
+| ZeroLog | 113.13 ns | 0.133 ns | 0.266 ns | 4.28 | - |
+
+</details>
 
 > **Clip:** Formats into a pooled byte buffer and writes UTF-8 directly — no intermediate strings. Timestamp is cached so repeated calls within the same millisecond skip reformatting.
 
@@ -189,11 +199,11 @@ logger.Info("Request handled");
 
 <!-- -->
 
-> **ZLogger:** Enqueues the raw state to a background thread — formatting is fully deferred. The benchmark captures enqueue cost only.
+> **ZLogger:** Enqueues the raw state to a background thread — formatting is fully deferred. Under sustained load the background queue fills up, adding backpressure to the calling thread.
 
 <!-- -->
 
-> **NLog:** Allocates a log-event struct per call. Output is produced by a chain of layout renderers writing strings.
+> **NLog:** Allocates a log-event object per call. Output is produced by a chain of layout renderers writing strings.
 
 <!-- -->
 
@@ -217,20 +227,25 @@ logger.Info("Request handled", new {
 });
 ```
 
-![Console_FiveFields](tmp/charts/Console_FiveFields.svg)
+![Console_FiveFields](docs/charts/Console_FiveFields.svg)
 
-| Logger | Mean | vs Clip | Allocated |
-|--------|-----:|--------:|----------:|
-| **Clip** | 188.08 ns | 1.00 | 72 B |
-| **ClipZero** | 139.15 ns | 0.74 | - |
-| **ClipMEL** | 394.20 ns | 2.10 | 608 B |
-| MEL | 811.72 ns | 4.32 | 808 B |
-| MELSrcGen | 917.01 ns | 4.88 | 904 B |
-| Serilog | 730.01 ns | 3.88 | 1216 B |
-| ZLogger | 404.19 ns | 2.15 | - |
-| NLog | 653.08 ns | 3.47 | 1368 B |
-| Log4Net | 332.17 ns | 1.77 | 888 B |
-| ZeroLog | 306.35 ns | 1.63 | - |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 191.20 ns | 0.284 ns | 0.573 ns | 1.00 | 72 B |
+| **ClipZero** | 140.63 ns | 0.121 ns | 0.241 ns | 0.74 | - |
+| **ClipMEL** | 390.26 ns | 0.448 ns | 0.906 ns | 2.04 | 608 B |
+| MEL | 886.08 ns | 3.898 ns | 7.875 ns | 4.63 | 760 B |
+| MELSrcGen | 783.41 ns | 5.874 ns | 11.865 ns | 4.10 | 856 B |
+| Serilog | 715.36 ns | 2.004 ns | 4.049 ns | 3.74 | 1216 B |
+| ZLogger | 500.95 ns | 0.478 ns | 0.955 ns | 2.62 | - |
+| NLog | 615.36 ns | 1.444 ns | 2.916 ns | 3.22 | 1368 B |
+| Log4Net | 318.79 ns | 0.334 ns | 0.660 ns | 1.67 | 888 B |
+| ZeroLog | 278.05 ns | 0.178 ns | 0.356 ns | 1.45 | - |
+
+</details>
 
 > **Clip:** Ergonomic tier allocates one anonymous object (40 B); fields extracted via compiled expression trees (cached per type). Zero-alloc tier passes fields as stack-allocated structs — no boxing, no heap allocation. Both write typed values into the same pooled byte buffer.
 
@@ -252,7 +267,7 @@ logger.Info("Request handled", new {
 
 <!-- -->
 
-> **ZLogger:** Background thread — enqueue cost only. Interpolated-string handlers avoid boxing but add struct construction overhead.
+> **ZLogger:** Background thread — formatting deferred. Interpolated-string handlers avoid boxing but add struct construction overhead. Under sustained load, backpressure from a full queue increases calling-thread cost.
 
 <!-- -->
 
@@ -277,18 +292,23 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 }
 ```
 
-![Console_WithContext](tmp/charts/Console_WithContext.svg)
+![Console_WithContext](docs/charts/Console_WithContext.svg)
 
-| Logger | Mean | vs Clip | Allocated |
-|--------|-----:|--------:|----------:|
-| **Clip** | 133.17 ns | 1.00 | 232 B |
-| **ClipZero** | 111.82 ns | 0.84 | 176 B |
-| **ClipMEL** | 244.03 ns | 1.83 | 576 B |
-| MEL | 601.33 ns | 4.52 | 792 B |
-| MELSrcGen | 609.39 ns | 4.58 | 808 B |
-| Serilog | 687.15 ns | 5.16 | 1344 B |
-| ZLogger | 388.59 ns | 2.92 | 200 B |
-| NLog | 454.57 ns | 3.41 | 1288 B |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 125.06 ns | 0.070 ns | 0.136 ns | 1.00 | 232 B |
+| **ClipZero** | 107.27 ns | 0.463 ns | 0.924 ns | 0.86 | 176 B |
+| **ClipMEL** | 231.44 ns | 0.538 ns | 1.037 ns | 1.85 | 576 B |
+| MEL | 557.60 ns | 10.829 ns | 21.875 ns | 4.46 | 744 B |
+| MELSrcGen | 540.52 ns | 11.744 ns | 23.723 ns | 4.32 | 760 B |
+| Serilog | 648.46 ns | 2.207 ns | 4.458 ns | 5.19 | 1344 B |
+| ZLogger | 517.91 ns | 5.842 ns | 11.801 ns | 4.14 | 200 B |
+| NLog | 422.64 ns | 0.709 ns | 1.431 ns | 3.38 | 1288 B |
+
+</details>
 
 > **Clip:** Context stored in AsyncLocal<Field[]>. Ergonomic tier allocates an anonymous object for call-site fields; zero-alloc tier passes them as stack-allocated structs. Context and call-site fields merged at write time.
 
@@ -331,20 +351,25 @@ logger.Error("Connection failed", ex, new {
 });
 ```
 
-![Console_WithException](tmp/charts/Console_WithException.svg)
+![Console_WithException](docs/charts/Console_WithException.svg)
 
-| Logger | Mean | vs Clip | Allocated |
-|--------|-----:|--------:|----------:|
-| **Clip** | 1,697.10 ns | 1.00 | 2384 B |
-| **ClipZero** | 1,668.15 ns | 0.98 | 2352 B |
-| **ClipMEL** | 1,809.63 ns | 1.07 | 2648 B |
-| MEL | 3,231.40 ns | 1.90 | 4024 B |
-| MELSrcGen | 3,774.82 ns | 2.22 | 4017 B |
-| Serilog | 2,189.35 ns | 1.29 | 3864 B |
-| ZLogger | 599.03 ns | 0.35 | 1377 B |
-| NLog | 2,213.76 ns | 1.30 | 4040 B |
-| Log4Net | 2,383.64 ns | 1.40 | 4449 B |
-| ZeroLog | 2,182.29 ns | 1.29 | 2736 B |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 1,719.24 ns | 1.907 ns | 3.852 ns | 1.00 | 2480 B |
+| **ClipZero** | 1,704.84 ns | 1.200 ns | 2.396 ns | 0.99 | 2448 B |
+| **ClipMEL** | 1,799.20 ns | 1.795 ns | 3.458 ns | 1.05 | 2744 B |
+| MEL | 3,401.88 ns | 41.472 ns | 83.775 ns | 1.98 | 4064 B |
+| MELSrcGen | 3,140.83 ns | 24.142 ns | 48.768 ns | 1.83 | 4064 B |
+| Serilog | 2,152.17 ns | 2.143 ns | 4.231 ns | 1.25 | 3960 B |
+| ZLogger | 1,988.66 ns | 232.719 ns | 448.371 ns | 1.16 | 449 B |
+| NLog | 2,180.38 ns | 2.377 ns | 4.748 ns | 1.27 | 4136 B |
+| Log4Net | 1,954.66 ns | 1.415 ns | 2.726 ns | 1.14 | 4544 B |
+| ZeroLog | 1,913.81 ns | 3.963 ns | 7.915 ns | 1.11 | 2832 B |
+
+</details>
 
 > **Clip:** Exception rendered synchronously into the same pooled byte buffer.
 
@@ -366,7 +391,7 @@ logger.Error("Connection failed", ex, new {
 
 <!-- -->
 
-> **ZLogger:** Exception formatting deferred to a background thread. The benchmark only measures enqueue cost.
+> **ZLogger:** Exception formatting deferred to a background thread. Under sustained load, backpressure causes high variance and inflated mean times.
 
 <!-- -->
 
@@ -382,7 +407,7 @@ logger.Error("Connection failed", ex, new {
 
 <!-- -->
 
-> Exception benchmarks are not directly comparable across loggers — ZLogger defers formatting to a background thread while all others format synchronously.
+> Exception benchmarks are not directly comparable across loggers — ZLogger defers formatting to a background thread (with backpressure under sustained load) while all others format synchronously.
 
 ---
 
@@ -419,17 +444,23 @@ Message only, no structured fields attached.
 logger.Info("Request handled");
 ```
 
-![Json_NoFields](tmp/charts/Json_NoFields.svg)
+![Json_NoFields](docs/charts/Json_NoFields.svg)
 
-| Logger | Mean | vs Clip | Allocated |
-|--------|-----:|--------:|----------:|
-| **Clip** | 28.16 ns | 1.00 | - |
-| **ClipZero** | 27.97 ns | 0.99 | - |
-| MEL | 962.46 ns | 34.18 | 784 B |
-| MELSrcGen | 1,083.35 ns | 38.47 | 752 B |
-| Serilog | 296.88 ns | 10.54 | 608 B |
-| ZLogger | 345.03 ns | 12.25 | - |
-| NLog | 170.71 ns | 6.06 | 288 B |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 26.68 ns | 0.011 ns | 0.020 ns | 1.00 | - |
+| **ClipZero** | 27.01 ns | 0.007 ns | 0.014 ns | 1.01 | - |
+| **ClipMEL** | 61.61 ns | 0.144 ns | 0.274 ns | 2.31 | 64 B |
+| MEL | 837.89 ns | 3.834 ns | 7.656 ns | 31.41 | 784 B |
+| MELSrcGen | 802.90 ns | 9.295 ns | 18.777 ns | 30.09 | 752 B |
+| Serilog | 247.25 ns | 0.292 ns | 0.589 ns | 9.27 | 608 B |
+| ZLogger | 325.55 ns | 7.446 ns | 15.042 ns | 12.20 | - |
+| NLog | 138.79 ns | 0.238 ns | 0.476 ns | 5.20 | 291 B |
+
+</details>
 
 > **Clip:** Builds JSON as raw UTF-8 bytes into a pooled buffer. String values are escaped using SIMD.
 
@@ -447,15 +478,11 @@ logger.Info("Request handled");
 
 <!-- -->
 
-> **ZLogger:** Background thread — benchmark measures enqueue cost only. Has a real JSON formatter.
+> **ZLogger:** Background thread — formatting deferred. Has a real JSON formatter. Under sustained load, backpressure from a full queue increases calling-thread cost.
 
 <!-- -->
 
 > **NLog:** Each JSON attribute is rendered individually through the layout engine. String-based output.
-
-<!-- -->
-
-> Log4Net and ZeroLog are excluded from JSON benchmarks. Log4Net has no JSON formatter. ZeroLog has no built-in JSON output mode.
 
 ### JSON: Five Fields
 
@@ -471,17 +498,23 @@ logger.Info("Request handled", new {
 });
 ```
 
-![Json_FiveFields](tmp/charts/Json_FiveFields.svg)
+![Json_FiveFields](docs/charts/Json_FiveFields.svg)
 
-| Logger | Mean | vs Clip | Allocated |
-|--------|-----:|--------:|----------:|
-| **Clip** | 188.54 ns | 1.00 | 72 B |
-| **ClipZero** | 131.26 ns | 0.70 | - |
-| MEL | 2,033.44 ns | 10.79 | 1824 B |
-| MELSrcGen | 2,250.46 ns | 11.94 | 2272 B |
-| Serilog | 1,111.71 ns | 5.90 | 1408 B |
-| ZLogger | 324.29 ns | 1.72 | 326 B |
-| NLog | 1,051.19 ns | 5.58 | 1384 B |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 176.20 ns | 0.262 ns | 0.529 ns | 1.00 | 72 B |
+| **ClipZero** | 129.18 ns | 0.092 ns | 0.185 ns | 0.73 | - |
+| **ClipMEL** | 451.20 ns | 0.459 ns | 0.862 ns | 2.56 | 704 B |
+| MEL | 1,924.97 ns | 4.528 ns | 9.043 ns | 10.92 | 1824 B |
+| MELSrcGen | 1,931.31 ns | 14.522 ns | 28.323 ns | 10.96 | 2272 B |
+| Serilog | 911.76 ns | 0.723 ns | 1.323 ns | 5.17 | 1408 B |
+| ZLogger | 1,154.44 ns | 86.505 ns | 170.752 ns | 6.55 | 12 B |
+| NLog | 789.35 ns | 0.932 ns | 1.882 ns | 4.48 | 1387 B |
+
+</details>
 
 > **Clip:** Ergonomic tier allocates one anonymous object (40 B); fields extracted via expression trees. Zero-alloc tier passes stack-allocated structs directly. Both write typed JSON values with no boxing and no intermediate strings.
 
@@ -499,15 +532,11 @@ logger.Info("Request handled", new {
 
 <!-- -->
 
-> **ZLogger:** Background thread — enqueue cost only. Interpolated-string handlers avoid boxing but add struct construction overhead.
+> **ZLogger:** Background thread — formatting deferred. Interpolated-string handlers avoid boxing but add struct construction overhead. Under sustained load, backpressure from a full queue increases calling-thread cost.
 
 <!-- -->
 
 > **NLog:** Event properties are boxed and rendered through the layout engine as strings.
-
-<!-- -->
-
-> Log4Net and ZeroLog are excluded from JSON benchmarks. Log4Net has no JSON formatter. ZeroLog has no built-in JSON output mode.
 
 ### JSON: With Context
 
@@ -520,17 +549,23 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 }
 ```
 
-![Json_WithContext](tmp/charts/Json_WithContext.svg)
+![Json_WithContext](docs/charts/Json_WithContext.svg)
 
-| Logger | Mean | vs Clip | Allocated |
-|--------|-----:|--------:|----------:|
-| **Clip** | 127.69 ns | 1.00 | 232 B |
-| **ClipZero** | 112.32 ns | 0.88 | 176 B |
-| MEL | 1,616.38 ns | 12.66 | 1440 B |
-| MELSrcGen | 1,873.38 ns | 14.67 | 1432 B |
-| Serilog | 817.03 ns | 6.40 | 1432 B |
-| ZLogger | 1,188.49 ns | 9.31 | 286 B |
-| NLog | 563.18 ns | 4.41 | 1288 B |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 123.08 ns | 0.101 ns | 0.203 ns | 1.00 | 232 B |
+| **ClipZero** | 105.47 ns | 0.145 ns | 0.293 ns | 0.86 | 176 B |
+| **ClipMEL** | 222.10 ns | 1.266 ns | 2.409 ns | 1.80 | 576 B |
+| MEL | 1,310.36 ns | 47.158 ns | 95.262 ns | 10.65 | 1440 B |
+| MELSrcGen | 1,316.70 ns | 31.368 ns | 63.366 ns | 10.70 | 1432 B |
+| Serilog | 677.96 ns | 0.433 ns | 0.854 ns | 5.51 | 1432 B |
+| ZLogger | 583.22 ns | 9.744 ns | 19.683 ns | 4.74 | 200 B |
+| NLog | 441.53 ns | 0.435 ns | 0.827 ns | 3.59 | 1291 B |
+
+</details>
 
 > **Clip:** Ergonomic tier allocates an anonymous object for call-site fields; zero-alloc tier uses stack-allocated structs. Context and call-site fields merged at write time into the same pooled buffer.
 
@@ -558,10 +593,6 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 
 > Log4Net and ZeroLog are excluded from context benchmarks — neither has a scoped-context API comparable to Serilog LogContext, NLog ScopeContext, or MEL BeginScope.
 
-<!-- -->
-
-> Log4Net and ZeroLog are excluded from JSON benchmarks. Log4Net has no JSON formatter. ZeroLog has no built-in JSON output mode.
-
 ### JSON: With Exception
 
 Message with an attached exception including a full stack trace.
@@ -573,17 +604,23 @@ logger.Error("Connection failed", ex, new {
 });
 ```
 
-![Json_WithException](tmp/charts/Json_WithException.svg)
+![Json_WithException](docs/charts/Json_WithException.svg)
 
-| Logger | Mean | vs Clip | Allocated |
-|--------|-----:|--------:|----------:|
-| **Clip** | 1,719.19 ns | 1.00 | 2384 B |
-| **ClipZero** | 1,690.16 ns | 0.98 | 2352 B |
-| MEL | 4,475.70 ns | 2.60 | 4265 B |
-| MELSrcGen | 4,542.27 ns | 2.64 | 4273 B |
-| Serilog | 2,494.88 ns | 1.45 | 3665 B |
-| ZLogger | 753.70 ns | 0.44 | 1376 B |
-| NLog | 2,471.18 ns | 1.44 | 4336 B |
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 1,713.26 ns | 1.670 ns | 3.373 ns | 1.00 | 2480 B |
+| **ClipZero** | 1,676.58 ns | 1.412 ns | 2.852 ns | 0.98 | 2448 B |
+| **ClipMEL** | 1,771.99 ns | 2.577 ns | 4.841 ns | 1.03 | 2464 B |
+| MEL | 3,751.33 ns | 12.818 ns | 24.388 ns | 2.19 | 4360 B |
+| MELSrcGen | 3,795.16 ns | 11.699 ns | 21.974 ns | 2.22 | 4368 B |
+| Serilog | 2,394.40 ns | 2.720 ns | 5.306 ns | 1.40 | 3760 B |
+| ZLogger | 4,991.11 ns | 1,105.786 ns | 2,208.375 ns | 2.91 | 459 B |
+| NLog | 2,345.66 ns | 2.618 ns | 5.288 ns | 1.37 | 4435 B |
+
+</details>
 
 > **Clip:** Exception serialized as a structured JSON object synchronously into the pooled buffer.
 
@@ -601,7 +638,7 @@ logger.Error("Connection failed", ex, new {
 
 <!-- -->
 
-> **ZLogger:** Exception formatting deferred to a background thread. The benchmark only measures enqueue cost.
+> **ZLogger:** Exception formatting deferred to a background thread. Under sustained load, backpressure causes high variance and inflated mean times.
 
 <!-- -->
 
@@ -609,8 +646,144 @@ logger.Error("Connection failed", ex, new {
 
 <!-- -->
 
-> Log4Net and ZeroLog are excluded from JSON benchmarks. Log4Net has no JSON formatter. ZeroLog has no built-in JSON output mode.
+> Exception benchmarks are not directly comparable across loggers — ZLogger defers formatting to a background thread (with backpressure under sustained load) while all others format synchronously.
 
 <!-- -->
 
-> Exception benchmarks are not directly comparable across loggers — ZLogger defers formatting to a background thread while all others format synchronously.
+> Log4Net and ZeroLog are excluded from JSON benchmarks. Log4Net has no JSON formatter. ZeroLog has no built-in JSON output mode.
+
+---
+
+## Pipeline
+
+Clip processes every log entry through a configurable pipeline before it reaches the sink. Three stages run in order:
+
+- **Enrichers** add fields to every log entry — machine name, service version, request ID. Enricher fields have the lowest priority: context and call-site fields override them on key collision. Each enricher can be level-gated so it only fires at or above a threshold (e.g., skip enrichment for Debug calls).
+- **Field filters** remove fields by key before they reach the sink. A filter returning `true` for a key causes that field to be dropped entirely — it never reaches redactors or sinks. Use cases: strip internal-only fields, remove verbose debug-only properties from production output.
+- **Redactors** transform field values in place. A redactor receives each field by ref and can replace its value — mask passwords, truncate tokens, scrub PII. Redactors run after filtering, so filtered fields are never redacted.
+
+The pipeline runs synchronously on the calling thread. These benchmarks measure each stage's overhead on a console log call with three fields. All output goes to `Stream.Null`.
+
+### Pipeline: Enriched
+
+An enricher adds one constant field (`app=benchmark`) to every log call. Measures enrichment overhead on top of normal three-field logging.
+
+```csharp
+// Clip
+var logger = Logger.Create(c => c
+    .Enrich.Field("app", "benchmark")
+    .WriteTo.Console());
+logger.Info("Request handled", new { Method, Status, Elapsed });
+```
+
+![Enriched](docs/charts/Enriched.svg)
+
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 148.93 ns | 0.314 ns | 0.598 ns | 1.00 | 40 B |
+| **ClipZero** | 145.20 ns | 0.164 ns | 0.320 ns | 0.97 | - |
+| Serilog | 641.26 ns | 2.742 ns | 5.150 ns | 4.31 | 1136 B |
+| NLog | 609.19 ns | 2.051 ns | 3.801 ns | 4.09 | 1248 B |
+
+</details>
+
+> **Clip:** Enricher configured via `.Enrich.Field("app", "benchmark")`. The field is added to the internal field list on every call. Enricher fields have the lowest priority — call-site and context fields override them on key collision.
+
+<!-- -->
+
+> **Serilog:** Enricher configured via `.Enrich.WithProperty("app", "benchmark")`. The property is added to every `LogEvent` object at construction time. No level gating — the enricher runs on every enabled call.
+
+<!-- -->
+
+> **NLog:** Global property via `GlobalDiagnosticsContext.Set()`, rendered through a `${gdc:item=app}` layout directive. The value is looked up from a concurrent dictionary on each render.
+
+### Pipeline: Field Filtered
+
+A field filter removes fields matching a key. Here a `password` field is passed but filtered out before it reaches the sink.
+
+```csharp
+// Clip
+var logger = Logger.Create(c => c
+    .Filter.Fields("password")
+    .WriteTo.Console());
+logger.Info("Request handled", new { Method, Status, password = "secret" });
+```
+
+![FieldFiltered](docs/charts/FieldFiltered.svg)
+
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 91.10 ns | 0.241 ns | 0.465 ns | 1.00 | 40 B |
+| **ClipZero** | 85.24 ns | 0.068 ns | 0.130 ns | 0.94 | - |
+
+</details>
+
+> **Clip:** Filter configured via `.Filter.Fields("password")`. Each field key is checked against a hash set. Filtered fields never reach redactors or sinks.
+
+<!-- -->
+
+> Field-level filtering is unique to Clip. Other loggers offer event-level filtering (suppressing entire log entries by level or category) but cannot selectively remove individual fields from an entry.
+
+### Pipeline: Redacted
+
+A redactor replaces field values by key. Here the `Token` field value is replaced with `***` before it reaches the sink.
+
+```csharp
+// Clip
+var logger = Logger.Create(c => c
+    .Redact.Fields("Token")
+    .WriteTo.Console());
+logger.Info("Request handled", new { Method, Status, Token = "bearer-abc" });
+```
+
+![Redacted](docs/charts/Redacted.svg)
+
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 106.22 ns | 0.171 ns | 0.317 ns | 1.00 | 40 B |
+| **ClipZero** | 100.30 ns | 0.105 ns | 0.194 ns | 0.94 | - |
+
+</details>
+
+> **Clip:** Redactor configured via `.Redact.Fields("Token")`. Each field is checked by key (case-insensitive) and matching values are replaced with `***`. Runs after filtering — filtered fields are never redacted.
+
+<!-- -->
+
+> Runtime field-value redaction is unique to Clip. MEL offers compile-time redaction via a separate package (`Microsoft.Extensions.Compliance.Redaction`) using data classification attributes — a fundamentally different approach.
+
+### Pipeline: Full Pipeline
+
+All three pipeline stages active at once: enricher adds a field, filter removes `password`, redactor replaces `Token` with `***`.
+
+```csharp
+var logger = Logger.Create(c => c
+    .Enrich.Field("app", "benchmark")
+    .Filter.Fields("password")
+    .Redact.Fields("Token")
+    .WriteTo.Console());
+logger.Info("Request handled",
+    new { Method, Status, Token = "bearer-abc", password = "secret" });
+```
+
+![FullPipeline](docs/charts/FullPipeline.svg)
+
+<details>
+<summary>Benchmark data</summary>
+
+| Logger | Mean | Error | StdDev | vs Clip | Allocated |
+|--------|-----:|------:|-------:|--------:|----------:|
+| **Clip** | 165.41 ns | 0.354 ns | 0.682 ns | 1.00 | 48 B |
+| **ClipZero** | 162.99 ns | 0.849 ns | 1.553 ns | 0.99 | - |
+
+</details>
+
+> All three pipeline stages active: enricher adds `app=benchmark`, filter removes the `password` field, redactor replaces `Token` with `***`. The pipeline runs in a single pass — enrich, then filter + deduplicate + redact in one loop over the field list.

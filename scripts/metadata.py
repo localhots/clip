@@ -137,6 +137,85 @@ DESCRIPTIONS = {
       'logger.Error("Connection failed", ex, new {\n    Host = "db.local",\n    Port = 5432,\n});'
     ),
   },
+  "Pipeline": {
+    "text": (
+      "Clip processes every log entry through a configurable pipeline"
+      " before it reaches the sink. Three stages run in order:\n"
+      "\n"
+      "- **Enrichers** add fields to every log entry — machine name,"
+      " service version, request ID. Enricher fields have the lowest"
+      " priority: context and call-site fields override them on key"
+      " collision. Each enricher can be level-gated so it only fires"
+      " at or above a threshold (e.g., skip enrichment for Debug calls).\n"
+      "- **Field filters** remove fields by key before they reach the"
+      " sink. A filter returning `true` for a key causes that field to"
+      " be dropped entirely — it never reaches redactors or sinks."
+      " Use cases: strip internal-only fields, remove verbose"
+      " debug-only properties from production output.\n"
+      "- **Redactors** transform field values in place. A redactor"
+      " receives each field by ref and can replace its value —"
+      " mask passwords, truncate tokens, scrub PII. Redactors run"
+      " after filtering, so filtered fields are never redacted.\n"
+      "\n"
+      "The pipeline runs synchronously on the calling thread."
+      " These benchmarks measure each stage's overhead on a console"
+      " log call with three fields. All output goes to `Stream.Null`."
+    ),
+  },
+  "Enriched": {
+    "text": (
+      "An enricher adds one constant field (`app=benchmark`) to every log call."
+      " Measures enrichment overhead on top of normal three-field logging."
+    ),
+    "code": (
+      "// Clip\n"
+      'var logger = Logger.Create(c => c\n'
+      '    .Enrich.Field("app", "benchmark")\n'
+      "    .WriteTo.Console());\n"
+      'logger.Info("Request handled", new { Method, Status, Elapsed });'
+    ),
+  },
+  "FieldFiltered": {
+    "text": (
+      "A field filter removes fields matching a key. Here a `password` field"
+      " is passed but filtered out before it reaches the sink."
+    ),
+    "code": (
+      "// Clip\n"
+      'var logger = Logger.Create(c => c\n'
+      '    .Filter.Fields("password")\n'
+      "    .WriteTo.Console());\n"
+      'logger.Info("Request handled", new { Method, Status, password = "secret" });'
+    ),
+  },
+  "Redacted": {
+    "text": (
+      "A redactor replaces field values by key. Here the `Token` field"
+      " value is replaced with `***` before it reaches the sink."
+    ),
+    "code": (
+      "// Clip\n"
+      'var logger = Logger.Create(c => c\n'
+      '    .Redact.Fields("Token")\n'
+      "    .WriteTo.Console());\n"
+      'logger.Info("Request handled", new { Method, Status, Token = "bearer-abc" });'
+    ),
+  },
+  "FullPipeline": {
+    "text": (
+      "All three pipeline stages active at once: enricher adds a field,"
+      " filter removes `password`, redactor replaces `Token` with `***`."
+    ),
+    "code": (
+      'var logger = Logger.Create(c => c\n'
+      '    .Enrich.Field("app", "benchmark")\n'
+      '    .Filter.Fields("password")\n'
+      '    .Redact.Fields("Token")\n'
+      "    .WriteTo.Console());\n"
+      'logger.Info("Request handled",\n'
+      '    new { Method, Status, Token = "bearer-abc", password = "secret" });'
+    ),
+  },
 }
 CAVEATS = {
   #
@@ -231,7 +310,7 @@ CAVEATS = {
     {
       "logger": "NLog",
       "text": (
-        "Allocates a log-event struct per call. Output is"
+        "Allocates a log-event object per call. Output is"
         " produced by a chain of layout renderers writing"
         " strings."
       ),
@@ -259,8 +338,9 @@ CAVEATS = {
       "logger": "ZLogger",
       "text": (
         "Enqueues the raw state to a background thread —"
-        " formatting is fully deferred. The benchmark"
-        " captures enqueue cost only."
+        " formatting is fully deferred. Under sustained"
+        " load the background queue fills up, adding"
+        " backpressure to the calling thread."
       ),
     },
     {
@@ -333,9 +413,10 @@ CAVEATS = {
     {
       "logger": "ZLogger",
       "text": (
-        "Background thread — enqueue cost only."
+        "Background thread — formatting deferred."
         " Interpolated-string handlers avoid boxing but add"
-        " struct construction overhead."
+        " struct construction overhead. Under sustained load,"
+        " backpressure from a full queue increases calling-thread cost."
       ),
     },
     {
@@ -467,7 +548,8 @@ CAVEATS = {
       "logger": "ZLogger",
       "text": (
         "Exception formatting deferred to a background"
-        " thread. The benchmark only measures enqueue cost."
+        " thread. Under sustained load, backpressure"
+        " causes high variance and inflated mean times."
       ),
     },
     {
@@ -494,15 +576,25 @@ CAVEATS = {
       "text": (
         "Exception benchmarks are not directly comparable"
         " across loggers — ZLogger defers formatting to a"
-        " background thread while all others format"
+        " background thread (with backpressure under"
+        " sustained load) while all others format"
         " synchronously."
       ),
     },
   ],
   #
-  # JSON-specific (applies to all Json_* charts)
+  # JSON-specific exclusion note (not on WithContext — it has its own)
   #
-  "Json": [
+  "Json_NoFields": [
+    {
+      "text": (
+        "Log4Net and ZeroLog are excluded from JSON"
+        " benchmarks. Log4Net has no JSON formatter."
+        " ZeroLog has no built-in JSON output mode."
+      ),
+    },
+  ],
+  "Json_FiveFields": [
     {
       "text": (
         "Log4Net and ZeroLog are excluded from JSON"
@@ -553,7 +645,7 @@ CAVEATS = {
     {
       "logger": "ZLogger",
       "text": (
-        "Background thread — benchmark measures enqueue cost only. Has a real JSON formatter."
+        "Background thread — formatting deferred. Has a real JSON formatter. Under sustained load, backpressure from a full queue increases calling-thread cost."
       ),
     },
   ],
@@ -598,9 +690,10 @@ CAVEATS = {
     {
       "logger": "ZLogger",
       "text": (
-        "Background thread — enqueue cost only."
+        "Background thread — formatting deferred."
         " Interpolated-string handlers avoid boxing but add"
-        " struct construction overhead."
+        " struct construction overhead. Under sustained load,"
+        " backpressure from a full queue increases calling-thread cost."
       ),
     },
   ],
@@ -689,15 +782,111 @@ CAVEATS = {
       "logger": "ZLogger",
       "text": (
         "Exception formatting deferred to a background"
-        " thread. The benchmark only measures enqueue cost."
+        " thread. Under sustained load, backpressure"
+        " causes high variance and inflated mean times."
       ),
     },
     {
       "text": (
         "Exception benchmarks are not directly comparable"
         " across loggers — ZLogger defers formatting to a"
-        " background thread while all others format"
+        " background thread (with backpressure under"
+        " sustained load) while all others format"
         " synchronously."
+      ),
+    },
+    {
+      "text": (
+        "Log4Net and ZeroLog are excluded from JSON"
+        " benchmarks. Log4Net has no JSON formatter."
+        " ZeroLog has no built-in JSON output mode."
+      ),
+    },
+  ],
+  #
+  # Pipeline: Enriched
+  #
+  "Enriched": [
+    {
+      "logger": "Clip",
+      "text": (
+        "Enricher configured via `.Enrich.Field(\"app\", \"benchmark\")`."
+        " The field is added to the internal field list on every call."
+        " Enricher fields have the lowest priority — call-site and"
+        " context fields override them on key collision."
+      ),
+    },
+    {
+      "logger": "Serilog",
+      "text": (
+        "Enricher configured via `.Enrich.WithProperty(\"app\", \"benchmark\")`."
+        " The property is added to every `LogEvent` object at construction"
+        " time. No level gating — the enricher runs on every enabled call."
+      ),
+    },
+    {
+      "logger": "NLog",
+      "text": (
+        "Global property via `GlobalDiagnosticsContext.Set()`, rendered"
+        " through a `${gdc:item=app}` layout directive. The value is"
+        " looked up from a concurrent dictionary on each render."
+      ),
+    },
+  ],
+  #
+  # Pipeline: FieldFiltered
+  #
+  "FieldFiltered": [
+    {
+      "logger": "Clip",
+      "text": (
+        "Filter configured via `.Filter.Fields(\"password\")`."
+        " Each field key is checked against a hash set. Filtered"
+        " fields never reach redactors or sinks."
+      ),
+    },
+    {
+      "text": (
+        "Field-level filtering is unique to Clip. Other loggers"
+        " offer event-level filtering (suppressing entire log"
+        " entries by level or category) but cannot selectively"
+        " remove individual fields from an entry."
+      ),
+    },
+  ],
+  #
+  # Pipeline: Redacted
+  #
+  "Redacted": [
+    {
+      "logger": "Clip",
+      "text": (
+        "Redactor configured via `.Redact.Fields(\"Token\")`."
+        " Each field is checked by key (case-insensitive) and"
+        " matching values are replaced with `***`. Runs after"
+        " filtering — filtered fields are never redacted."
+      ),
+    },
+    {
+      "text": (
+        "Runtime field-value redaction is unique to Clip."
+        " MEL offers compile-time redaction via a separate"
+        " package (`Microsoft.Extensions.Compliance.Redaction`)"
+        " using data classification attributes — a fundamentally"
+        " different approach."
+      ),
+    },
+  ],
+  #
+  # Pipeline: FullPipeline
+  #
+  "FullPipeline": [
+    {
+      "text": (
+        "All three pipeline stages active: enricher adds `app=benchmark`,"
+        " filter removes the `password` field, redactor replaces `Token`"
+        " with `***`. The pipeline runs in a single pass — enrich, then"
+        " filter + deduplicate + redact in one loop over the field list."
       ),
     },
   ],
@@ -846,10 +1035,10 @@ FEATURES = {
     "zero_alloc": False,
     "msg_templates": True,
     "src_gen": True,
-    "enrichers": True,
+    "enrichers": False,
     "level_gated_enrichers": False,
     "filters": True,
-    "redactors": True,
+    "redactors": False,
     "scoped_ctx": True,
     "console": True,
     "json": True,
