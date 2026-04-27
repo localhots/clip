@@ -112,7 +112,8 @@ def _chart_ref(cat: str) -> list[str]:
   """Return markdown image reference if chart exists."""
   chart = CHARTS_DIR / f"{cat}.svg"
   if chart.exists():
-    return [f"![{cat}]({chart})", ""]
+    rel = chart.relative_to(OUTPUT_FILE.parent).as_posix()
+    return [f"![{cat}]({rel})", ""]
   return []
 
 

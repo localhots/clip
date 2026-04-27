@@ -2,7 +2,7 @@
 
 BenchmarkDotNet v0.15.8, macOS Tahoe 26.3.1 (25D2128) [Darwin 25.3.0]  
 Apple M5, 1 CPU, 10 logical and 10 physical cores  
-Run: 2026-04-27 18:30
+Run: 2026-04-27 21:10
 
 Clip is a zero-dependency structured logging library for .NET 9. It formats directly into pooled UTF-8 byte buffers — no intermediate strings, no allocations on the hot path, no background-thread tricks to hide latency.
 
@@ -115,7 +115,7 @@ Debug call at Info minimum level — measures the cost of checking the level and
 logger.Debug("This is filtered out");
 ```
 
-![Filtered](docs/charts/Filtered.svg)
+![Filtered](charts/Filtered.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -197,7 +197,7 @@ Message only, no structured fields attached.
 logger.Info("Request handled");
 ```
 
-![Console_NoFields](docs/charts/Console_NoFields.svg)
+![Console_NoFields](charts/Console_NoFields.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -265,7 +265,7 @@ logger.Info("Request handled", new {
 });
 ```
 
-![Console_FiveFields](docs/charts/Console_FiveFields.svg)
+![Console_FiveFields](charts/Console_FiveFields.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -330,7 +330,7 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 }
 ```
 
-![Console_WithContext](docs/charts/Console_WithContext.svg)
+![Console_WithContext](charts/Console_WithContext.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -389,7 +389,7 @@ logger.Error("Connection failed", ex, new {
 });
 ```
 
-![Console_WithException](docs/charts/Console_WithException.svg)
+![Console_WithException](charts/Console_WithException.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -482,7 +482,7 @@ Message only, no structured fields attached.
 logger.Info("Request handled");
 ```
 
-![Json_NoFields](docs/charts/Json_NoFields.svg)
+![Json_NoFields](charts/Json_NoFields.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -536,7 +536,7 @@ logger.Info("Request handled", new {
 });
 ```
 
-![Json_FiveFields](docs/charts/Json_FiveFields.svg)
+![Json_FiveFields](charts/Json_FiveFields.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -587,7 +587,7 @@ using (logger.AddContext(new { RequestId = "abc-123", UserId = 42 }))
 }
 ```
 
-![Json_WithContext](docs/charts/Json_WithContext.svg)
+![Json_WithContext](charts/Json_WithContext.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -642,7 +642,7 @@ logger.Error("Connection failed", ex, new {
 });
 ```
 
-![Json_WithException](docs/charts/Json_WithException.svg)
+![Json_WithException](charts/Json_WithException.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -714,7 +714,7 @@ var logger = Logger.Create(c => c
 logger.Info("Request handled", new { Method, Status, Elapsed });
 ```
 
-![Enriched](docs/charts/Enriched.svg)
+![Enriched](charts/Enriched.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -750,7 +750,7 @@ var logger = Logger.Create(c => c
 logger.Info("Request handled", new { Method, Status, password = "secret" });
 ```
 
-![FieldFiltered](docs/charts/FieldFiltered.svg)
+![FieldFiltered](charts/FieldFiltered.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -780,7 +780,7 @@ var logger = Logger.Create(c => c
 logger.Info("Request handled", new { Method, Status, Token = "bearer-abc" });
 ```
 
-![Redacted](docs/charts/Redacted.svg)
+![Redacted](charts/Redacted.svg)
 
 <details>
 <summary>Benchmark data</summary>
@@ -812,7 +812,7 @@ logger.Info("Request handled",
     new { Method, Status, Token = "bearer-abc", password = "secret" });
 ```
 
-![FullPipeline](docs/charts/FullPipeline.svg)
+![FullPipeline](charts/FullPipeline.svg)
 
 <details>
 <summary>Benchmark data</summary>
