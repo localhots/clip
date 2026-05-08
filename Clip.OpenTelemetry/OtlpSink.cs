@@ -270,6 +270,12 @@ public sealed class OtlpSink : ILogSink
             _scopeLogs.LogRecords.Add(record);
         }
 
+        // Break the feedback loop: any log emitted during the export call (e.g.
+        // by Grpc.Net.Client / HttpClient diagnostic listeners routed back into
+        // Clip via MEL) would re-enter this sink and amplify traffic. The scope
+        // flows across the awaits below, including retry delays.
+        using var _ = Logger.SuppressLogging();
+
         for (var attempt = 0; ; attempt++)
             try
             {
