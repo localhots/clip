@@ -430,6 +430,33 @@ public class OtlpSinkIntegrationTests
     }
 
     [Fact]
+    public async Task ExportInstrumentation_DoesNotFeedBackIntoSink()
+    {
+        // Simulates the OTel feedback loop: the gRPC/HTTP client used to ship
+        // logs is itself instrumented, so each export emits more logs that the
+        // same Logger would re-route into the sink. With the suppression scope
+        // around the export, the reentrant log calls must be dropped before they
+        // reach the channel, so CallCount stays bounded by the user's writes.
+        var exporter = new LoggingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+        var sink = new OtlpSink(options, exporter);
+        using var logger = Logger.Create(c => c.WriteTo.Sink(sink));
+        exporter.Logger = logger;
+
+        logger.Info("user log");
+
+        await exporter.WaitForExportAsync(TimeSpan.FromSeconds(2));
+        // Give the loop multiple flush windows to amplify if suppression is broken.
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+
+        Assert.Equal(1, exporter.CallCount);
+    }
+
+    [Fact]
     public void OtelResourceAttributes_ParsedFromEnv()
     {
         var prev = Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES");
@@ -557,6 +584,32 @@ public class OtlpSinkIntegrationTests
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>
+    /// Stands in for a Grpc.Net.Client / HttpClient diagnostic listener that emits
+    /// a log on each outbound call. The reentrant log routes back to the same
+    /// Logger and would feed the same OtlpSink without the suppression scope.
+    /// </summary>
+    private sealed class LoggingExporter : IExporter
+    {
+        private readonly SemaphoreSlim _signal = new(0);
+        private int _callCount;
+
+        public Logger? Logger { get; set; }
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        public Task<ExportLogsServiceResponse> ExportAsync(ExportLogsServiceRequest request, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _callCount);
+            Logger?.Info("simulated transport log", new { url = "https://collector/v1/logs" });
+            _signal.Release();
+            return Task.FromResult(new ExportLogsServiceResponse());
+        }
+
+        public Task WaitForExportAsync(TimeSpan timeout) => _signal.WaitAsync(timeout);
+
+        public void Dispose() => _signal.Dispose();
     }
 
     private sealed class PartialSuccessExporter(long rejectedCount) : IExporter

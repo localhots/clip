@@ -147,6 +147,13 @@ public sealed class Logger : ILogger, IZeroLogger
         return LogScope.Push(fields);
     }
 
+    /// <summary>
+    /// Suppresses all log calls made on the current async flow until the returned
+    /// scope is disposed. Used to break feedback loops when emitting logs would
+    /// trigger more logs (e.g. an OTLP sink whose own gRPC traffic is instrumented).
+    /// </summary>
+    public static SuppressionScope SuppressLogging() => LogSuppression.Begin();
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Trace(string message, object? fields = null)
     {
@@ -263,6 +270,7 @@ public sealed class Logger : ILogger, IZeroLogger
     private void LogErgonomic(LogLevel level, string message, object? fields, Exception? exception)
     {
         if (MinLevel > level) return;
+        if (LogSuppression.IsActive) return;
         LogErgonomicImpl(level, message, fields, exception);
     }
 
@@ -310,6 +318,7 @@ public sealed class Logger : ILogger, IZeroLogger
     private void LogZeroAlloc(LogLevel level, string message, ReadOnlySpan<Field> fields, Exception? exception)
     {
         if (MinLevel > level) return;
+        if (LogSuppression.IsActive) return;
         LogZeroAllocImpl(level, message, fields, exception);
     }
 
