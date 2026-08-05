@@ -10,6 +10,8 @@ public sealed class ConsoleFormatConfig
 {
     private readonly byte[][] _labelBytes;
     private readonly int _minMessageWidth = 40;
+    private readonly int _maxCollectionItems = 100;
+    private readonly int _maxCollectionDepth = 3;
     private readonly IReadOnlyList<string> _levelLabels = ["TRAC", "DEBU", "INFO", "WARN", "ERRO", "FATA"];
 
     public string TimestampFormat { get; init; } = "yyyy-MM-dd HH:mm:ss.fff";
@@ -45,6 +47,28 @@ public sealed class ConsoleFormatConfig
     {
         get => _minMessageWidth;
         init => _minMessageWidth = Math.Max(0, value);
+    }
+
+    /// <summary>
+    /// Maximum number of elements rendered per collection field value before a
+    /// <c>...</c> marker is emitted. Also bounds enumeration of lazy sequences, which
+    /// may be unbounded. Default 100.
+    /// </summary>
+    public int MaxCollectionItems
+    {
+        get => _maxCollectionItems;
+        init => _maxCollectionItems = Math.Max(0, value);
+    }
+
+    /// <summary>
+    /// Maximum nesting depth rendered for collection field values. A collection at this
+    /// depth is rendered as <c>[...]</c> / <c>{...}</c> instead of being expanded.
+    /// Caps stack usage on self-referencing or deeply nested structures. Default 3.
+    /// </summary>
+    public int MaxCollectionDepth
+    {
+        get => _maxCollectionDepth;
+        init => _maxCollectionDepth = Math.Max(0, value);
     }
 
     public IReadOnlyList<string> LevelLabels

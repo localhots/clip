@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Runtime.InteropServices;
 using Clip.Internal;
 
 namespace Clip.Sinks;
@@ -26,6 +28,8 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
     private readonly int _minMessageWidth = config.MinMessageWidth;
     private readonly bool _sanitize = config.SanitizeControlCharacters;
     private readonly int _maxInnerExceptionDepth = config.MaxInnerExceptionDepth;
+    private readonly int _maxCollectionItems = config.MaxCollectionItems;
+    private readonly int _maxCollectionDepth = config.MaxCollectionDepth;
     private readonly LogBuffer _buffer = new(config.MaxLogEntryBytes);
     private readonly TimestampCache _tsCache = new(config.TimestampFormat, config.CachePrecision);
     private readonly Lock _lock = new();
@@ -161,13 +165,167 @@ public sealed class ConsoleSink(ConsoleFormatConfig config, Stream? output = nul
             case FieldType.String: WriteUserText(buf, (string?)f.RefValue ?? "null", allowMultiline: false); break;
             case FieldType.Decimal: buf.WriteDecimal(f.DecimalValue); break;
             case FieldType.Guid: buf.WriteGuid(f.GuidValue); break;
-            case FieldType.Object:
-                if (f.RefValue is IUtf8SpanFormattable fmt)
-                    buf.WriteUtf8Formattable(fmt);
-                else
-                    WriteUserText(buf, f.RefValue?.ToString() ?? "null", allowMultiline: false);
-                break;
+            case FieldType.Object: WriteObjectValue(buf, f.RefValue, depth: 0); break;
         }
+    }
+
+    //
+    // Object rendering
+    //
+
+    /// <summary>
+    /// Renders a boxed field value. Collections are expanded (<c>[a, b, c]</c> for
+    /// sequences, <c>{k=v, k=v}</c> for dictionaries) rather than falling through to
+    /// <c>ToString()</c>, which for most collection types yields only the type name.
+    /// </summary>
+    private void WriteObjectValue(LogBuffer buf, object? value, int depth)
+    {
+        switch (value)
+        {
+            case null: buf.WriteBytes("null"u8); return;
+            case string s: WriteUserText(buf, s, allowMultiline: false); return;
+            // Covers every primitive numeric type plus DateTime/DateTimeOffset/TimeSpan/Guid:
+            // formats straight into the buffer with no intermediate string.
+            case IUtf8SpanFormattable fmt: buf.WriteUtf8Formattable(fmt); return;
+            case IDictionary dict: WriteDictionary(buf, dict, depth); return;
+            case IEnumerable seq: WriteSequence(buf, seq, depth); return;
+            default: WriteUserText(buf, value.ToString() ?? "null", allowMultiline: false); return;
+        }
+    }
+
+    private void WriteSequence(LogBuffer buf, IEnumerable seq, int depth)
+    {
+        if (depth >= _maxCollectionDepth)
+        {
+            buf.WriteBytes("[...]"u8);
+            return;
+        }
+
+        // Typed fast paths: iterate the backing storage directly, so neither the elements
+        // nor an enumerator are allocated. CollectionsMarshal.AsSpan is O(1) and safe here
+        // because nothing in this call path mutates the list.
+        switch (seq)
+        {
+            case string[] a: WriteStringSpan(buf, a); return;
+            case List<string> l: WriteStringSpan(buf, CollectionsMarshal.AsSpan(l)); return;
+            case int[] a: WriteFormattableSpan<int>(buf, a); return;
+            case List<int> l: WriteFormattableSpan<int>(buf, CollectionsMarshal.AsSpan(l)); return;
+            case long[] a: WriteFormattableSpan<long>(buf, a); return;
+            case List<long> l: WriteFormattableSpan<long>(buf, CollectionsMarshal.AsSpan(l)); return;
+            case double[] a: WriteFormattableSpan<double>(buf, a); return;
+            case List<double> l: WriteFormattableSpan<double>(buf, CollectionsMarshal.AsSpan(l)); return;
+        }
+
+        buf.WriteByte((byte)'[');
+
+        // Indexed path for anything else list-shaped (other arrays, other List<T>,
+        // Collection<T>, ...): no enumerator allocation, though value-type elements box.
+        if (seq is IList list)
+        {
+            var shown = Math.Min(list.Count, _maxCollectionItems);
+            for (var i = 0; i < shown; i++)
+            {
+                if (i > 0) buf.WriteBytes(", "u8);
+                WriteObjectValue(buf, list[i], depth + 1);
+                if (buf.Saturated) break;
+            }
+
+            WriteOverflow(buf, list.Count - shown, shown);
+        }
+        else
+        {
+            var n = 0;
+            foreach (var item in seq)
+            {
+                // Also the guard that keeps an unbounded (lazy, possibly infinite) sequence
+                // from spinning forever once the buffer has stopped accepting writes.
+                if (n == _maxCollectionItems)
+                {
+                    if (n > 0) buf.WriteBytes(", "u8);
+                    buf.WriteBytes("..."u8);
+                    break;
+                }
+
+                if (n > 0) buf.WriteBytes(", "u8);
+                WriteObjectValue(buf, item, depth + 1);
+                n++;
+                if (buf.Saturated) break;
+            }
+        }
+
+        buf.WriteByte((byte)']');
+    }
+
+    private void WriteDictionary(LogBuffer buf, IDictionary dict, int depth)
+    {
+        if (depth >= _maxCollectionDepth)
+        {
+            buf.WriteBytes("{...}"u8);
+            return;
+        }
+
+        buf.WriteByte((byte)'{');
+        var n = 0;
+        foreach (DictionaryEntry entry in dict)
+        {
+            if (n == _maxCollectionItems)
+            {
+                if (n > 0) buf.WriteBytes(", "u8);
+                buf.WriteBytes("..."u8);
+                break;
+            }
+
+            if (n > 0) buf.WriteBytes(", "u8);
+            WriteObjectValue(buf, entry.Key, depth + 1);
+            buf.WriteByte((byte)'=');
+            WriteObjectValue(buf, entry.Value, depth + 1);
+            n++;
+            if (buf.Saturated) break;
+        }
+
+        buf.WriteByte((byte)'}');
+    }
+
+    private void WriteStringSpan(LogBuffer buf, ReadOnlySpan<string> items)
+    {
+        buf.WriteByte((byte)'[');
+        var shown = Math.Min(items.Length, _maxCollectionItems);
+        for (var i = 0; i < shown; i++)
+        {
+            if (i > 0) buf.WriteBytes(", "u8);
+            if (items[i] is null) buf.WriteBytes("null"u8);
+            else WriteUserText(buf, items[i], allowMultiline: false);
+            if (buf.Saturated) break;
+        }
+
+        WriteOverflow(buf, items.Length - shown, shown);
+        buf.WriteByte((byte)']');
+    }
+
+    private void WriteFormattableSpan<T>(LogBuffer buf, ReadOnlySpan<T> items)
+        where T : IUtf8SpanFormattable
+    {
+        buf.WriteByte((byte)'[');
+        var shown = Math.Min(items.Length, _maxCollectionItems);
+        for (var i = 0; i < shown; i++)
+        {
+            if (i > 0) buf.WriteBytes(", "u8);
+            buf.WriteFormattable(items[i]);
+            if (buf.Saturated) break;
+        }
+
+        WriteOverflow(buf, items.Length - shown, shown);
+        buf.WriteByte((byte)']');
+    }
+
+    /// <summary>Emits <c>, ... (N more)</c> when a counted collection was clipped.</summary>
+    private static void WriteOverflow(LogBuffer buf, int remaining, int shown)
+    {
+        if (remaining <= 0) return;
+        if (shown > 0) buf.WriteBytes(", "u8);
+        buf.WriteBytes("... ("u8);
+        buf.WriteLong(remaining);
+        buf.WriteBytes(" more)"u8);
     }
 
     private void WriteException(LogBuffer buf, Exception ex, int depth = 0)

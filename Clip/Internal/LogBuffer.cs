@@ -270,7 +270,14 @@ internal sealed class LogBuffer
         _pos += w;
     }
 
-    public void WriteUtf8Formattable(IUtf8SpanFormattable value)
+    public void WriteUtf8Formattable(IUtf8SpanFormattable value) => WriteFormattable(value);
+
+    /// <summary>
+    /// Generic counterpart of <see cref="WriteUtf8Formattable"/>. When T is a value type the
+    /// JIT specializes this and the TryFormat call is a constrained (non-boxing) call, so
+    /// spans of primitives can be rendered without boxing each element.
+    /// </summary>
+    public void WriteFormattable<T>(T value) where T : IUtf8SpanFormattable
     {
         if (_pos + 64 > _buf.Length && !TryGrow(64)) return;
         if (value.TryFormat(_buf.AsSpan(_pos), out var w, default, CultureInfo.InvariantCulture))
