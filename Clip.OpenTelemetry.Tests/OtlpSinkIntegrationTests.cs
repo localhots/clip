@@ -49,6 +49,33 @@ public class OtlpSinkIntegrationTests
     }
 
     [Fact]
+    public async Task Collection_ExportsContentsAtLogTime()
+    {
+        var exporter = new CapturingExporter();
+        var options = new OtlpSinkOptions
+        {
+            BatchSize = 1,
+            FlushInterval = TimeSpan.FromMilliseconds(50),
+        };
+
+        var ids = new List<int> { 1, 2 };
+        using (var sink = new OtlpSink(options, exporter))
+        {
+            ReadOnlySpan<Field> fields = [new("ids", (object)ids)];
+            sink.Write(DateTimeOffset.UtcNow, LogLevel.Info, "msg", fields, null);
+
+            // Mutating after the log call must affect neither the exported value nor the export.
+            ids.Add(3);
+            ids.Clear();
+
+            await exporter.WaitForExportsAsync(1, TimeSpan.FromSeconds(2));
+        }
+
+        var record = exporter.Requests[0].ResourceLogs[0].ScopeLogs[0].LogRecords[0];
+        Assert.Equal([1L, 2L], record.Attributes[0].Value.ArrayValue.Values.Select(v => v.IntValue));
+    }
+
+    [Fact]
     public async Task Batching_AccumulatesEntries()
     {
         var exporter = new CapturingExporter();
