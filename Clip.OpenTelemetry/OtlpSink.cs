@@ -144,6 +144,14 @@ public sealed class OtlpSink : ILogSink
         {
             fieldArray = ArrayPool<Field>.Shared.Rent(fieldCount);
             fields.CopyTo(fieldArray);
+
+            // Collections are read now, not on the export thread — see FieldMapper.SnapshotCollection.
+            for (var i = 0; i < fieldCount; i++)
+            {
+                ref readonly var f = ref fieldArray[i];
+                if (f.Type == FieldType.Object && FieldMapper.SnapshotCollection(f.RefValue) is { } snapshot)
+                    fieldArray[i] = new Field(f.Key, snapshot);
+            }
         }
 
         var activity = Activity.Current;
